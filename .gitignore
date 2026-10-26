@@ -1,0 +1,13 @@
+# Android/Gradle build output
+.gradle/
+**/build/
+local.properties
+captures/
+
+# IDE
+.idea/
+*.iml
+
+# Kotlin/Gradle caches
+.kotlin/
+*.hprof
