@@ -133,6 +133,11 @@ secrets:
 Without them, the release APK uses the debug-key fallback described above and
 its artifact name ends in `debug-key`; it must not be published.
 
+Publishing a GitHub Release triggers `.github/workflows/release.yml`, which
+builds a signed release APK and attaches it to the release as
+`gb3android-<tag>.apk`. That workflow requires the four signing secrets and
+fails instead of attaching a debug-signed APK when they are missing.
+
 ## First run
 
 The app asks for the base URL of a `gb2c` server, for example
