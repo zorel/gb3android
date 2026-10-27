@@ -77,6 +77,11 @@ fun PostRow(
                 append(' ')
             }
         }
+        when {
+            display.isMine -> withStyle(SpanStyle(color = palette.mine)) { append("⭐ ") }
+            display.isReply -> withStyle(SpanStyle(color = palette.reply)) { append("↩ ") }
+            display.isBigorno -> withStyle(SpanStyle(color = palette.bigorno)) { append("📢 ") }
+        }
         val clockStyle = if (selected) {
             SpanStyle(
                 color = colors.onPrimary,
@@ -115,11 +120,6 @@ fun PostRow(
             ),
         ) {
             append(post.displayIdentity)
-        }
-        when {
-            display.isMine -> withStyle(SpanStyle(color = palette.mine)) { append(" ⭐") }
-            display.isReply -> withStyle(SpanStyle(color = palette.reply)) { append(" ↩") }
-            display.isBigorno -> withStyle(SpanStyle(color = palette.bigorno)) { append(" 📢") }
         }
         append("  ")
     }

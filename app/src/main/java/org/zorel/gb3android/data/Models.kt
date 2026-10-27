@@ -34,7 +34,7 @@ data class Post(
         }
 
     val displayIdentity: String
-        get() = login.ifBlank { shortBrowserUserAgent(info) }
+        get() = trimIdentity(login.ifBlank { shortBrowserUserAgent(info) })
 
     companion object {
         fun keyOf(tribune: String, id: Long): String = "$tribune:$id"
@@ -103,6 +103,15 @@ fun shortBrowserUserAgent(userAgent: String): String {
     }
     return userAgent.ifBlank { "coward" }
 }
+
+/** Long logins and raw user agents would otherwise take over the post row. */
+fun trimIdentity(identity: String, maxLength: Int = MAX_IDENTITY_LENGTH): String {
+    if (identity.codePointCount(0, identity.length) <= maxLength) return identity
+    val end = identity.offsetByCodePoints(0, maxLength - 1)
+    return identity.substring(0, end).trimEnd() + "…"
+}
+
+private const val MAX_IDENTITY_LENGTH = 24
 
 private fun browserPlatform(userAgent: String): String = when {
     userAgent.contains("Android") -> "Android"
