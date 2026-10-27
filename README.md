@@ -114,6 +114,25 @@ The test suite includes an SSE burst regression test (gb2c replays its whole
 history in one burst when a client connects; the client applies backpressure
 instead of silently dropping events) and parser/conversation tests.
 
+## Continuous integration
+
+GitHub Actions runs the unit tests and builds both the debug and release APKs
+for pushes and pull requests to `main` (`.github/workflows/android-ci.yml`).
+Successful runs upload the APKs as the `gb3-android-debug` and
+`gb3-android-release-*` workflow artifacts.
+
+To sign the release APK in CI with a real release key, add these repository
+secrets:
+
+- `GB3_RELEASE_KEYSTORE_BASE64`: the keystore file as a single-line base64
+  string (`base64 -w0 release.jks` on Linux, `base64 -i release.jks` on macOS);
+- `GB3_RELEASE_KEYSTORE_PASSWORD`;
+- `GB3_RELEASE_KEY_ALIAS`;
+- `GB3_RELEASE_KEY_PASSWORD`.
+
+Without them, the release APK uses the debug-key fallback described above and
+its artifact name ends in `debug-key`; it must not be published.
+
 ## First run
 
 The app asks for the base URL of a `gb2c` server, for example
