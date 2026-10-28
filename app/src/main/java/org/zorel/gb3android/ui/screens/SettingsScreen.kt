@@ -11,9 +11,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
@@ -24,6 +27,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -39,8 +43,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.zorel.gb3android.data.BlockedDisplayMode
+import org.zorel.gb3android.data.Board
+import org.zorel.gb3android.data.BoardAuth
+import org.zorel.gb3android.data.ConnectionMode
 import org.zorel.gb3android.data.csvSet
 import org.zorel.gb3android.ui.SettingsInput
 import org.zorel.gb3android.ui.UiState
@@ -56,6 +64,8 @@ fun SettingsScreen(
     onMarkAllRead: () -> Unit,
     onReconnect: () -> Unit,
     onRefresh: () -> Unit,
+    onAddBoard: (Board) -> Boolean,
+    onRemoveBoard: (String) -> Boolean,
 ) {
     var serverUrl by rememberSaveable { mutableStateOf(state.serverUrl) }
     var nickname by rememberSaveable { mutableStateOf(state.nickname) }
@@ -63,15 +73,21 @@ fun SettingsScreen(
     var blocked by rememberSaveable { mutableStateOf(state.localBlocked.joinToString(",")) }
     var displayModeName by rememberSaveable { mutableStateOf(state.displayMode.name) }
     var plopList by rememberSaveable { mutableStateOf(state.plopList.joinToString(",")) }
+    var modeName by rememberSaveable { mutableStateOf(state.connectionMode.name) }
     var error by remember { mutableStateOf<String?>(null) }
     var selectionError by remember { mutableStateOf<String?>(null) }
+    var showBoardDialog by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
+    val directMode = modeName == ConnectionMode.DirectBoards.name
+    val boardNames = state.boards.map { it.name }
 
     LaunchedEffect(state.tribunes) {
         selectedCsv = state.tribunes.joinToString(",")
     }
 
-    val options = if (state.availableTribunes.isNotEmpty()) {
+    val options = if (directMode) {
+        boardNames.sorted()
+    } else if (state.availableTribunes.isNotEmpty()) {
         state.availableTribunes
     } else {
         state.tribunes
@@ -98,17 +114,53 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item {
-                SettingsSection("Server") {
+                SettingsSection("Connection") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = !directMode,
+                            onClick = {
+                                modeName = ConnectionMode.Server.name
+                                selectedCsv = state.tribunes.joinToString(",")
+                            },
+                            label = { Text("gb2c server") },
+                        )
+                        FilterChip(
+                            selected = directMode,
+                            onClick = {
+                                modeName = ConnectionMode.DirectBoards.name
+                                val current = selectedCsv.csvSet()
+                                if (current.none { it in boardNames }) {
+                                    selectedCsv = boardNames.sorted().joinToString(",")
+                                }
+                            },
+                            label = { Text("Direct boards") },
+                        )
+                    }
                     androidx.compose.material3.OutlinedTextField(
                         value = serverUrl,
                         onValueChange = { serverUrl = it },
-                        label = { Text("gb2c URL") },
+                        label = {
+                            Text(
+                                if (directMode) {
+                                    "gb2c URL (optional, for totoz/emoji/LinuxFR)"
+                                } else {
+                                    "gb2c URL"
+                                },
+                            )
+                        },
                         placeholder = { Text("https://gb3.example.com") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                         modifier = Modifier.fillMaxWidth(),
                         supportingText = {
-                            Text("Changing the server reloads tribunes and conversation filters.")
+                            Text(
+                                if (directMode) {
+                                    "Boards are fetched and posted to directly; the server is only " +
+                                        "used for auxiliary services."
+                                } else {
+                                    "Changing the server reloads tribunes and conversation filters."
+                                },
+                            )
                         },
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -116,6 +168,11 @@ fun SettingsScreen(
                             val ok = onSave(
                                 SettingsInput(
                                     serverUrl = serverUrl,
+                                    connectionMode = if (directMode) {
+                                        ConnectionMode.DirectBoards
+                                    } else {
+                                        ConnectionMode.Server
+                                    },
                                     nickname = nickname,
                                     selectedTribunes = selected,
                                     blockedIdentities = blocked,
@@ -123,12 +180,12 @@ fun SettingsScreen(
                                     plopList = plopList,
                                 ),
                             )
-                            if (!ok) error = "Invalid server URL"
+                            if (!ok) error = "Invalid server URL or board selection"
                         }) {
                             Text("Save settings")
                         }
                         OutlinedButton(onClick = onRefresh) {
-                            Text("Refresh tribunes")
+                            Text(if (directMode) "Refresh boards" else "Refresh tribunes")
                         }
                     }
                     error?.let {
@@ -181,13 +238,21 @@ fun SettingsScreen(
                 SettingsSection("Tribunes") {
                     if (options.isEmpty()) {
                         Text(
-                            text = "No tribunes loaded yet. Save a valid server URL and refresh.",
+                            text = if (directMode) {
+                                "No boards available. Add one below."
+                            } else {
+                                "No tribunes loaded yet. Save a valid server URL and refresh."
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     } else {
                         Text(
-                            text = "Selected tribunes are streamed live. Keep at least one.",
+                            text = if (directMode) {
+                                "Selected boards are downloaded directly. Keep at least one."
+                            } else {
+                                "Selected tribunes are streamed live. Keep at least one."
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -227,6 +292,51 @@ fun SettingsScreen(
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         }
+                    }
+                }
+            }
+
+            item {
+                SettingsSection("Boards") {
+                    Text(
+                        text = "Built-in boards mirror gb2c's default list. Custom boards are " +
+                            "read and posted to directly, without gb2c.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    state.boards.forEach { board ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = board.name,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                )
+                                Text(
+                                    text = board.backendUrl,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            if (!board.predefined) {
+                                TextButton(onClick = { onRemoveBoard(board.name) }) {
+                                    Text("Remove")
+                                }
+                            } else {
+                                Text(
+                                    text = "built-in",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                    OutlinedButton(onClick = { showBoardDialog = true }) {
+                        Text("Add custom board")
                     }
                 }
             }
@@ -312,6 +422,11 @@ fun SettingsScreen(
                         val ok = onSave(
                             SettingsInput(
                                 serverUrl = serverUrl,
+                                connectionMode = if (directMode) {
+                                    ConnectionMode.DirectBoards
+                                } else {
+                                    ConnectionMode.Server
+                                },
                                 nickname = nickname,
                                 selectedTribunes = selected,
                                 blockedIdentities = blocked,
@@ -319,7 +434,7 @@ fun SettingsScreen(
                                 plopList = plopList,
                             ),
                         )
-                        if (!ok) error = "Invalid server URL"
+                        if (!ok) error = "Invalid server URL or board selection"
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
@@ -328,6 +443,128 @@ fun SettingsScreen(
             }
         }
     }
+
+    if (showBoardDialog) {
+        AddBoardDialog(
+            onDismiss = { showBoardDialog = false },
+            onAdd = { board ->
+                val added = onAddBoard(board)
+                if (added) showBoardDialog = false
+                added
+            },
+        )
+    }
+}
+
+@Composable
+private fun AddBoardDialog(
+    onDismiss: () -> Unit,
+    onAdd: (Board) -> Boolean,
+) {
+    var name by remember { mutableStateOf("") }
+    var backendUrl by remember { mutableStateOf("") }
+    var postUrl by remember { mutableStateOf("") }
+    var postField by remember { mutableStateOf(Board.DEFAULT_POST_FIELD) }
+    var infoField by remember { mutableStateOf("") }
+    var oauth by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add custom board") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = backendUrl,
+                    onValueChange = { backendUrl = it },
+                    label = { Text("Backend TSV URL") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = postUrl,
+                    onValueChange = { postUrl = it },
+                    label = { Text("Post URL") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = postField,
+                    onValueChange = { postField = it },
+                    label = { Text("Post field") },
+                    placeholder = { Text(Board.DEFAULT_POST_FIELD) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = infoField,
+                    onValueChange = { infoField = it },
+                    label = { Text("Info field (optional)") },
+                    singleLine = true,
+                    supportingText = {
+                        Text("Leave empty to send the nickname in the User-Agent header, like gb2c.")
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = oauth,
+                        onCheckedChange = { oauth = it },
+                    )
+                    Text(
+                        text = "LinuxFR OAuth2 board",
+                        modifier = Modifier.padding(start = 4.dp),
+                    )
+                }
+                error?.let {
+                    Text(
+                        text = it,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val board = Board(
+                        name = name,
+                        backendUrl = backendUrl,
+                        postUrl = postUrl,
+                        postField = postField.ifBlank { Board.DEFAULT_POST_FIELD },
+                        infoField = infoField,
+                        auth = if (oauth) BoardAuth.OAuth2 else BoardAuth.None,
+                    )
+                    val validation = board.validationError()
+                    if (validation != null) {
+                        error = validation
+                    } else if (onAdd(board)) {
+                        error = null
+                    } else {
+                        error = "Could not add this board (duplicate name?)"
+                    }
+                },
+            ) {
+                Text("Add")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
 }
 
 private fun String.toBlockedDisplayMode(): BlockedDisplayMode =

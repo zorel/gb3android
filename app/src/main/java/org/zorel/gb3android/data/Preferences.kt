@@ -17,6 +17,23 @@ class Preferences(context: Context) {
         get() = prefs.getString(KEY_SERVER, "").orEmpty()
         set(value) = prefs.edit { putString(KEY_SERVER, value) }
 
+    var connectionMode: ConnectionMode
+        get() = if (prefs.getString(KEY_CONNECTION_MODE, null) == "direct") {
+            ConnectionMode.DirectBoards
+        } else {
+            ConnectionMode.Server
+        }
+        set(value) = prefs.edit {
+            putString(
+                KEY_CONNECTION_MODE,
+                if (value == ConnectionMode.DirectBoards) "direct" else "server",
+            )
+        }
+
+    var customBoardsJson: String
+        get() = prefs.getString(KEY_CUSTOM_BOARDS, "").orEmpty()
+        set(value) = prefs.edit { putString(KEY_CUSTOM_BOARDS, value) }
+
     var nickname: String
         get() = prefs.getString(KEY_NICKNAME, "").orEmpty()
         set(value) = prefs.edit { putString(KEY_NICKNAME, value) }
@@ -105,6 +122,8 @@ class Preferences(context: Context) {
 
     private companion object {
         const val KEY_SERVER = "server_url"
+        const val KEY_CONNECTION_MODE = "connection_mode"
+        const val KEY_CUSTOM_BOARDS = "custom_boards"
         const val KEY_NICKNAME = "nickname"
         const val KEY_TRIBUNES = "tribunes"
         const val KEY_KNOWN_TRIBUNES = "known_tribunes"
