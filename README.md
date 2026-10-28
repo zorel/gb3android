@@ -158,7 +158,8 @@ The app asks how to reach tribunes:
 - **Direct boards** - pick one or more boards and leave the server URL empty.
   The app downloads each board's TSV backend itself and posts to its post URL.
   A gb2c URL is still optional in this mode for emoji search, attachment uploads
-  and LinuxFR OAuth. Totoz search uses its own direct server setting below.
+  and LinuxFR OAuth. Totoz search is configured separately with its own direct
+  server URL.
 
 The nickname is sent as the post `info`; if it is left empty, a gc2-style random
 nickname is generated. On an Android emulator, `localhost` is the emulator
@@ -195,12 +196,24 @@ board. A custom board needs:
 Custom boards are stored as JSON in `SharedPreferences` and can be removed from
 the same section. Built-in boards are read-only.
 
-The **Services** settings section contains the totoz server URL. It defaults to
-`https://nsfw.totoz.eu`, the same search server gb2c uses. The app queries
-`<server>/search.xml` directly and builds previews under `<server>/img/<name>`,
-so totoz search works in direct mode without a gb2c server. Leave the field
-empty to fall back to gb2c's `/gb2c/totoz/search` endpoint when a gb2c URL is
-configured.
+### Totoz server
+
+The **Services** section in Settings (and the first-run setup screen) contains
+the totoz server URL. It defaults to `https://nsfw.totoz.eu`, the same search
+server gb2c uses internally.
+
+- Search requests go directly to `<server>/search.xml?terms=...`.
+- Preview images are loaded from `<server>/img/<name>`.
+- Totoz search therefore works in direct-board mode without a gb2c server.
+- Both a base URL (`https://nsfw.totoz.eu`) and a full
+  `https://nsfw.totoz.eu/search.xml` endpoint are accepted.
+- Leaving the field empty falls back to gb2c's `/gb2c/totoz/search` endpoint
+  when a gb2c URL is configured.
+
+The XML response is parsed defensively: external entities and DOCTYPE
+declarations are disabled, responses are bounded to 2 MiB, and blank names are
+ignored. Image URLs are always rebuilt from the configured server, like gb2c
+does, instead of trusting an image URL supplied by the server.
 
 Direct mode is deliberately defensive: rows with fewer than five fields or with
 an invalid/non-positive id are skipped, duplicate ids keep the latest row, extra
@@ -244,10 +257,18 @@ In gb2c mode:
 | `/gb2c/linuxfr/authorize` | OAuth authorization page |
 | `/gb2c/linuxfr/refresh` | refresh a LinuxFR token |
 
-In direct board mode, each configured board's `backendUrl` (TSV) and `postUrl`
-(form POST) are contacted directly. Totoz search and previews use the configured
-totoz server (`search.xml` and `/img/`). The optional gb2c server is only used
-for emoji search, attachments and LinuxFR OAuth.
+In direct board mode:
+
+| Endpoint | Usage |
+| --- | --- |
+| `<board backendUrl>` | five-column TSV history |
+| `<board postUrl>` | form-encoded post |
+| `<totoz server>/search.xml?terms=...` | direct totoz search |
+| `<totoz server>/img/<name>` | totoz preview image |
+
+Each configured board's `backendUrl` and `postUrl` are contacted directly.
+Totoz search and previews use the configured totoz server. The optional gb2c
+server is only used for emoji search, attachments and LinuxFR OAuth.
 
 The LinuxFR redirect configured on the gb2c server must be reachable from the
 device. gb2c currently builds that redirect with `https://`, so a gb2c instance
