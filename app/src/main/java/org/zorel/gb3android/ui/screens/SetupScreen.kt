@@ -29,11 +29,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.zorel.gb3android.R
 import org.zorel.gb3android.data.ConnectionMode
 import org.zorel.gb3android.data.csvSet
 import org.zorel.gb3android.ui.SettingsInput
@@ -56,6 +58,9 @@ fun SetupScreen(
     val scrollState = rememberScrollState()
     val directMode = modeName == ConnectionMode.DirectBoards.name
     val selectedBoards = directSelectionCsv.csvSet()
+    val selectBoardError = stringResource(R.string.setup_error_select_board)
+    val optionalServerError = stringResource(R.string.setup_error_optional_server)
+    val serverError = stringResource(R.string.setup_error_server)
 
     LaunchedEffect(state.boards, directMode) {
         if (directMode && selectedBoards.isEmpty() && state.boards.isNotEmpty()) {
@@ -76,13 +81,13 @@ fun SetupScreen(
             verticalArrangement = Arrangement.Center,
         ) {
             Text(
-                text = "gb3",
+                text = stringResource(R.string.app_name),
                 fontSize = 56.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
             )
             Text(
-                text = "Tribune and mouling agent",
+                text = stringResource(R.string.setup_tagline),
                 style = MaterialTheme.typography.titleMedium,
                 color = palette.muted,
             )
@@ -91,12 +96,12 @@ fun SetupScreen(
                 FilterChip(
                     selected = !directMode,
                     onClick = { modeName = ConnectionMode.Server.name },
-                    label = { Text("gb2c server") },
+                    label = { Text(stringResource(R.string.setup_mode_server)) },
                 )
                 FilterChip(
                     selected = directMode,
                     onClick = { modeName = ConnectionMode.DirectBoards.name },
-                    label = { Text("Direct boards") },
+                    label = { Text(stringResource(R.string.setup_mode_direct)) },
                 )
             }
             Spacer(Modifier.height(16.dp))
@@ -104,7 +109,15 @@ fun SetupScreen(
                 value = serverUrl,
                 onValueChange = { serverUrl = it },
                 label = {
-                    Text(if (directMode) "gb2c server URL (optional)" else "gb2c server URL")
+                    Text(
+                        stringResource(
+                            if (directMode) {
+                                R.string.setup_server_url_optional
+                            } else {
+                                R.string.setup_server_url
+                            },
+                        ),
+                    )
                 },
                 placeholder = { Text("https://gb3.example.com") },
                 singleLine = true,
@@ -114,12 +127,13 @@ fun SetupScreen(
                 modifier = Modifier.fillMaxWidth(),
                 supportingText = {
                     Text(
-                        if (directMode) {
-                            "Only used for totoz, emoji, attachments and LinuxFR login. " +
-                                "Posts are sent straight to the selected boards."
-                        } else {
-                            "Plain http:// is supported for self-hosted servers on a LAN."
-                        },
+                        stringResource(
+                            if (directMode) {
+                                R.string.setup_server_optional_support
+                            } else {
+                                R.string.setup_server_support
+                            },
+                        ),
                     )
                 },
             )
@@ -127,20 +141,20 @@ fun SetupScreen(
             OutlinedTextField(
                 value = nickname,
                 onValueChange = { nickname = it },
-                label = { Text("Nickname (optional)") },
+                label = { Text(stringResource(R.string.setup_nickname)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
-                supportingText = { Text("This is the info sent with your posts.") },
+                supportingText = { Text(stringResource(R.string.setup_nickname_support)) },
             )
             if (directMode) {
                 Spacer(Modifier.height(18.dp))
                 Text(
-                    text = "Boards",
+                    text = stringResource(R.string.setup_boards),
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text(
-                    text = "Selected boards are downloaded and posted to directly.",
+                    text = stringResource(R.string.setup_boards_support),
                     style = MaterialTheme.typography.bodySmall,
                     color = palette.muted,
                     modifier = Modifier.fillMaxWidth(),
@@ -174,7 +188,7 @@ fun SetupScreen(
             Button(
                 onClick = {
                     if (directMode && selectedBoards.isEmpty()) {
-                        error = "Select at least one board."
+                        error = selectBoardError
                         return@Button
                     }
                     val accepted = onConnect(
@@ -193,16 +207,12 @@ fun SetupScreen(
                         ),
                     )
                     if (!accepted) {
-                        error = if (directMode) {
-                            "Check the optional server URL."
-                        } else {
-                            "Please enter a valid http(s) server URL."
-                        }
+                        error = if (directMode) optionalServerError else serverError
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Connect")
+                Text(stringResource(R.string.setup_connect))
             }
             error?.let {
                 Text(
@@ -215,8 +225,7 @@ fun SetupScreen(
             }
             Spacer(Modifier.height(28.dp))
             Text(
-                text = "gb3 is a KISS bouchot stack. Posts stream live while the app is in the foreground. " +
-                    "All settings stay on this device.",
+                text = stringResource(R.string.setup_footer),
                 style = MaterialTheme.typography.bodySmall,
                 color = palette.muted,
                 textAlign = TextAlign.Center,

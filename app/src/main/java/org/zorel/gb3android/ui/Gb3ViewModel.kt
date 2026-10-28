@@ -2,12 +2,15 @@ package org.zorel.gb3android.ui
 
 import android.app.Application
 import android.net.Uri
+import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import org.zorel.gb3android.R
 import org.zorel.gb3android.data.BlockedDisplayMode
 import org.zorel.gb3android.data.Board
 import org.zorel.gb3android.data.BoardClient
 import org.zorel.gb3android.data.BoardCodec
+import org.zorel.gb3android.data.BoardValidationError
 import org.zorel.gb3android.data.ConnectionMode
 import org.zorel.gb3android.data.EmojiItem
 import org.zorel.gb3android.data.Gb3Api
@@ -167,27 +170,27 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         val current = _state.value
         if (current.directBoards) {
             if (current.tribunes.isEmpty()) {
-                emit("no board selected", isError = true)
+                emit(tr(R.string.error_no_board_selected), isError = true)
                 return
             }
             if (!foreground) {
-                emit("reconnect the app to resume the board refresh", isError = true)
+                emit(tr(R.string.error_reconnect_board_background), isError = true)
                 return
             }
-            emit("refreshing boards…")
+            emit(tr(R.string.msg_refreshing_boards))
             startBoardPolling(current.tribunes, force = true)
             return
         }
         if (current.serverUrl.isBlank()) return
         if (!foreground) {
-            emit("reconnect the app to resume the live stream", isError = true)
+            emit(tr(R.string.error_reconnect_stream_background), isError = true)
             return
         }
         if (bootstrapJob?.isActive == true) return
         if (current.tribunes.isEmpty()) {
             bootstrap()
         } else {
-            emit("reconnecting…")
+            emit(tr(R.string.msg_reconnecting))
             startPolling(current.serverUrl, current.tribunes, force = true)
         }
     }
@@ -233,7 +236,7 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             recomputeNow()
-            emit("select at least one board", isError = true)
+            emit(tr(R.string.error_select_board), isError = true)
             return
         }
 
@@ -278,7 +281,9 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
                     setupRequired = true,
                 )
             }
-            if (_state.value.serverUrl.isNotBlank()) emit("invalid server URL", isError = true)
+            if (_state.value.serverUrl.isNotBlank()) {
+                emit(tr(R.string.error_invalid_server), isError = true)
+            }
             return
         }
         prefs.serverUrl = normalized
@@ -293,7 +298,10 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
                 Result.failure(error)
             }
             val available = availableResult.getOrElse {
-                emit("cannot list tribunes: ${it.message ?: "network error"}", isError = true)
+                emit(
+                    tr(R.string.error_list_tribunes, it.message ?: tr(R.string.error_network)),
+                    isError = true,
+                )
                 known
             }
             if (availableResult.isSuccess) {
@@ -343,7 +351,7 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
                 recomputeNow()
-                emit("no tribune available on this server", isError = true)
+                emit(tr(R.string.error_no_tribune_server), isError = true)
                 return@launch
             }
 
@@ -408,7 +416,7 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
                 throw cancelled
             } catch (error: Exception) {
                 _state.update { it.copy(connecting = false, connected = false) }
-                emit(error.message ?: "poll stream stopped", isError = true)
+                emit(error.message ?: tr(R.string.error_poll_stopped), isError = true)
             }
         }
     }
@@ -472,7 +480,11 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
             updateBoardConnection()
             if (reportedBoardFailures.add(board.name)) {
                 emit(
-                    "cannot read ${board.name}: ${error.message ?: "network error"}",
+                    tr(
+                        R.string.error_cannot_read_board,
+                        board.name,
+                        error.message ?: tr(R.string.error_network),
+                    ),
                     isError = true,
                 )
             }
@@ -548,7 +560,7 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
                         return@mapNotNull null
                     }
                     val displayMessage = when {
-                        conversation.hidden -> "[message hidden]"
+                        conversation.hidden -> tr(R.string.msg_hidden_post)
                         plopOverrides[post.key] != null -> plopOverrides.getValue(post.key)
                         else -> post.message
                     }
@@ -670,17 +682,17 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         val conversation = analysis?.posts?.get(fromPostKey)
         val targetKey = conversation?.refs?.getOrNull(ref.index)?.targetKey
         if (targetKey == null) {
-            emit("no post at ${ref.displayText}", isError = true)
+            emit(tr(R.string.error_no_post_at, ref.displayText), isError = true)
             return
         }
         val target = allPosts[targetKey]
         if (target == null) {
-            emit("post at ${ref.displayText} is no longer available", isError = true)
+            emit(tr(R.string.error_post_gone, ref.displayText), isError = true)
             return
         }
         val targetConversation = analysis?.posts?.get(targetKey)
         if (targetConversation?.hidden == true && current.displayMode == BlockedDisplayMode.Hide) {
-            emit("post at ${ref.displayText} is hidden by the conversation filter", isError = true)
+            emit(tr(R.string.error_post_hidden, ref.displayText), isError = true)
             return
         }
         if (target.tribune != current.activeTribune) {
@@ -759,7 +771,7 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         if (name == "lastPosted") {
             val lastPosted = _state.value.lastPosted ?: prefs.lastPostedMessage
             if (lastPosted.isBlank()) {
-                emit("no previously posted message", isError = true)
+                emit(tr(R.string.error_no_previous_message), isError = true)
                 return
             }
             setDraft(TextDraft(lastPosted, lastPosted.length, lastPosted.length), focus = true)
@@ -793,7 +805,7 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
             null
         }
         if (current.directBoards && board == null) {
-            emit("unknown board $tribune", isError = true)
+            emit(tr(R.string.error_unknown_board, tribune), isError = true)
             return
         }
         val needsLinuxfr = board?.requiresOAuth == true || (!current.directBoards && tribune == "dlfp")
@@ -804,16 +816,13 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
                 if (token == null) {
                     if (current.directBoards && current.serverUrl.isBlank()) {
                         _state.update { it.copy(sending = false) }
-                        emit(
-                            "LinuxFR needs a gb3 server URL to authorize; set one in Settings",
-                            isError = true,
-                        )
+                        emit(tr(R.string.error_linuxfr_needs_server), isError = true)
                         return@launch
                     }
                     prefs.pendingLinuxfrMessage = message
                     clearDraft()
                     _state.update { it.copy(sending = false, screen = Screen.LinuxfrOauth) }
-                    emit("connect your linuxfr account to post there")
+                    emit(tr(R.string.msg_connect_linuxfr))
                     return@launch
                 }
                 postMessage(tribune, message, token)
@@ -841,7 +850,7 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 prefs.lastPostedMessage = message
                 _state.update { it.copy(sending = false, lastPosted = message) }
-                emit("posted to $tribune")
+                emit(tr(R.string.msg_posted_to, tribune))
                 // gb2c polls immediately after a post; do the same so the new
                 // message shows up without waiting for the next 30 second tick.
                 if (board != null) refreshBoard(board)
@@ -852,7 +861,7 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
                 if (_state.value.draft.text.isBlank()) {
                     restoreDraft(message)
                 }
-                emit(error.message ?: "cannot post message", isError = true)
+                emit(error.message ?: tr(R.string.error_cannot_post), isError = true)
             }
         }
     }
@@ -883,7 +892,7 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         if (current.serverUrl.isBlank()) {
             prefs.linuxfrSession = null
             _state.update { it.copy(linuxfr = null) }
-            emit("linuxfr session expired and no gb3 server is configured", isError = true)
+            emit(tr(R.string.error_linuxfr_expired_no_server), isError = true)
             return null
         }
         if (session.refreshToken.isBlank()) {
@@ -902,7 +911,13 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         } catch (error: Exception) {
             prefs.linuxfrSession = null
             _state.update { it.copy(linuxfr = null) }
-            emit("linuxfr session expired: ${error.message ?: "reconnect"}", isError = true)
+            emit(
+                tr(
+                    R.string.error_linuxfr_expired,
+                    error.message ?: tr(R.string.error_reconnect),
+                ),
+                isError = true,
+            )
             null
         }
     }
@@ -916,11 +931,11 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
             else -> Gb3Api.normalizeServerUrl(input.serverUrl)
         }
         if (mode == ConnectionMode.Server && normalized == null) {
-            emit("invalid server URL", isError = true)
+            emit(tr(R.string.error_invalid_server), isError = true)
             return false
         }
         if (input.serverUrl.isNotBlank() && normalized == null) {
-            emit("invalid server URL", isError = true)
+            emit(tr(R.string.error_invalid_server), isError = true)
             return false
         }
         val effectiveServer = normalized.orEmpty()
@@ -957,7 +972,7 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         prefs.blockedDisplayMode = input.displayMode
         prefs.plopListCsv = plopList.joinToString(",")
         prefs.selectedTribunesCsv = if (resetSelection) "" else effectiveSelected.joinToString(",")
-        emit("settings saved")
+        emit(tr(R.string.msg_settings_saved))
 
         _state.update {
             it.copy(
@@ -1062,13 +1077,13 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
     fun addCustomBoard(input: Board): Boolean {
         val error = input.validationError()
         if (error != null) {
-            emit("invalid board: $error", isError = true)
+            emit(tr(R.string.error_invalid_board, boardValidationText(error)), isError = true)
             return false
         }
         val current = _state.value
         val board = input.normalized()
         if (current.boards.any { it.name == board.name }) {
-            emit("a board named ${board.name} already exists", isError = true)
+            emit(tr(R.string.error_board_exists, board.name), isError = true)
             return false
         }
         val custom = current.boards.filter { !it.predefined } + board
@@ -1095,7 +1110,7 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
             recomputeNow()
             if (foreground) startBoardPolling(selected, force = true)
         }
-        emit("board ${board.name} added")
+        emit(tr(R.string.msg_board_added, board.name))
         return true
     }
 
@@ -1104,7 +1119,7 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         val board = current.boards.firstOrNull { it.name == name }
         if (board == null) return false
         if (board.predefined) {
-            emit("built-in boards cannot be removed", isError = true)
+            emit(tr(R.string.error_builtin_board), isError = true)
             return false
         }
         val custom = current.boards.filter { !it.predefined && it.name != name }
@@ -1139,14 +1154,14 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
-        emit("board $name removed")
+        emit(tr(R.string.msg_board_removed, name))
         return true
     }
 
     fun openLinuxfrOauth() {
         val current = _state.value
         if (current.serverUrl.isBlank()) {
-            emit("set a gb3 server URL to connect LinuxFR", isError = true)
+            emit(tr(R.string.error_connect_linuxfr_server), isError = true)
             return
         }
         _state.update { it.copy(screen = Screen.LinuxfrOauth) }
@@ -1174,7 +1189,7 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         recomputeNow()
-        emit("connected to linuxfr as ${session.login}")
+        emit(tr(R.string.msg_linuxfr_connected, session.login))
     }
 
     fun onLinuxfrOauthCancelled() {
@@ -1188,7 +1203,7 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         val current = _state.value
         if (current.uploading) return
         if (current.serverUrl.isBlank()) {
-            emit("attachments need a gb3 server URL", isError = true)
+            emit(tr(R.string.error_attachment_needs_server), isError = true)
             return
         }
         _state.update { it.copy(uploading = true) }
@@ -1200,11 +1215,11 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
                     uri,
                 )
                 insertAttachmentUrl(location)
-                emit("attachment uploaded")
+                emit(tr(R.string.msg_attachment_uploaded))
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                emit(error.message ?: "cannot upload attachment", isError = true)
+                emit(error.message ?: tr(R.string.error_upload_attachment), isError = true)
             } finally {
                 _state.update { it.copy(uploading = false) }
             }
@@ -1214,7 +1229,7 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun searchTotoz(terms: String): Result<List<Totoz>> {
         val baseUrl = _state.value.serverUrl
         if (baseUrl.isBlank()) {
-            return Result.failure(IOException("totoz search needs a gb3 server URL"))
+            return Result.failure(IOException(tr(R.string.error_totoz_needs_server)))
         }
         return try {
             Result.success(api.searchTotoz(baseUrl, terms))
@@ -1228,7 +1243,7 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun searchEmoji(terms: String): Result<List<EmojiItem>> {
         val baseUrl = _state.value.serverUrl
         if (baseUrl.isBlank()) {
-            return Result.failure(IOException("emoji search needs a gb3 server URL"))
+            return Result.failure(IOException(tr(R.string.error_emoji_needs_server)))
         }
         return try {
             Result.success(api.searchEmoji(baseUrl, terms))
@@ -1244,12 +1259,12 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
             .mapValues { (_, posts) -> posts.maxOf { it.id } }
         prefs.markAllRead(_state.value.tribunes, maxIds)
         recomputeNow()
-        emit("all tribunes marked as read")
+        emit(tr(R.string.msg_all_read))
     }
 
     fun refreshServerInfo() {
         if (!foreground) {
-            emit("cannot refresh while the app is in the background", isError = true)
+            emit(tr(R.string.error_refresh_background), isError = true)
             return
         }
         bootstrap()
@@ -1259,8 +1274,21 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         prefs.linuxfrSession = null
         _state.update { it.copy(linuxfr = null) }
         recomputeNow()
-        emit("linuxfr account disconnected")
+        emit(tr(R.string.msg_linuxfr_disconnected))
     }
+
+    private fun boardValidationText(error: BoardValidationError): String = when (error) {
+        BoardValidationError.NameRequired -> tr(R.string.board_error_name_required)
+        BoardValidationError.NameTooLong -> tr(R.string.board_error_name_too_long)
+        BoardValidationError.NameInvalid -> tr(R.string.board_error_name_invalid)
+        BoardValidationError.BackendUrl -> tr(R.string.board_error_backend_url)
+        BoardValidationError.PostUrl -> tr(R.string.board_error_post_url)
+        BoardValidationError.PostField -> tr(R.string.board_error_post_field)
+        BoardValidationError.InfoField -> tr(R.string.board_error_info_field)
+    }
+
+    private fun tr(@StringRes id: Int, vararg args: Any): String =
+        getApplication<Application>().getString(id, *args)
 
     private fun emit(message: String, isError: Boolean = false) {
         _events.trySend(UiEvent.Message(message, isError))

@@ -30,8 +30,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import org.zorel.gb3android.R
 import org.zorel.gb3android.data.LinuxfrSession
 import org.zorel.gb3android.ui.UiState
 import org.json.JSONObject
@@ -45,6 +48,7 @@ fun LinuxfrOAuthScreen(
     onCancel: () -> Unit,
 ) {
     val currentOnConnected by rememberUpdatedState(onConnected)
+    val context = LocalContext.current
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var webView by remember { mutableStateOf<WebView?>(null) }
@@ -66,7 +70,7 @@ fun LinuxfrOAuthScreen(
             )
         }.getOrNull()
         if (session == null) {
-            error = "The linuxfr server returned an unreadable token."
+            error = context.getString(R.string.linuxfr_unreadable)
             return false
         }
         tokenHandled = true
@@ -85,10 +89,13 @@ fun LinuxfrOAuthScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Connect LinuxFR") },
+                title = { Text(stringResource(R.string.linuxfr_connect_title)) },
                 navigationIcon = {
                     IconButton(onClick = onCancel) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Cancel")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_cancel),
+                        )
                     }
                 },
             )
@@ -111,8 +118,7 @@ fun LinuxfrOAuthScreen(
                 )
             }
             Text(
-                text = "Sign in on linuxfr.org. The app captures the token when the server redirects " +
-                    "back to /linuxfr.html; it never sees your password.",
+                text = stringResource(R.string.linuxfr_instructions),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
@@ -160,7 +166,10 @@ fun LinuxfrOAuthScreen(
                             ) {
                                 if (request.isForMainFrame) {
                                     loading = false
-                                    error = "Cannot reach linuxfr authorisation: ${webError.description}"
+                                    error = context.getString(
+                                        R.string.linuxfr_unreachable,
+                                        webError.description,
+                                    )
                                 }
                             }
                         }

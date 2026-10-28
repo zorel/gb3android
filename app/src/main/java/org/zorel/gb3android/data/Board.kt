@@ -10,6 +10,17 @@ enum class ConnectionMode { Server, DirectBoards }
 /** How a board authenticates a post. */
 enum class BoardAuth { None, OAuth2 }
 
+/** Why a user-defined board cannot be used. */
+enum class BoardValidationError {
+    NameRequired,
+    NameTooLong,
+    NameInvalid,
+    BackendUrl,
+    PostUrl,
+    PostField,
+    InfoField,
+}
+
 /**
  * A bouchot-style board that the app can read and post to directly.
  *
@@ -29,18 +40,20 @@ data class Board(
 ) {
     val requiresOAuth: Boolean get() = auth == BoardAuth.OAuth2
 
-    /** Returns a human-readable validation error, or null when the board is valid. */
-    fun validationError(): String? {
+    /** Returns why the board is invalid, or null when it is valid. */
+    fun validationError(): BoardValidationError? {
         val trimmedName = name.trim()
-        if (trimmedName.isEmpty()) return "board name is required"
-        if (trimmedName.length > MAX_NAME_LENGTH) return "board name is too long"
+        if (trimmedName.isEmpty()) return BoardValidationError.NameRequired
+        if (trimmedName.length > MAX_NAME_LENGTH) return BoardValidationError.NameTooLong
         if (trimmedName.any { it.isWhitespace() || it == ',' || it.isISOControl() }) {
-            return "board name cannot contain spaces, commas or control characters"
+            return BoardValidationError.NameInvalid
         }
-        if (normalizeHttpUrl(backendUrl) == null) return "backend URL must be a valid http(s) URL"
-        if (normalizeHttpUrl(postUrl) == null) return "post URL must be a valid http(s) URL"
-        if (!isValidFieldName(postField)) return "post field is required"
-        if (infoField.isNotEmpty() && !isValidFieldName(infoField)) return "info field is invalid"
+        if (normalizeHttpUrl(backendUrl) == null) return BoardValidationError.BackendUrl
+        if (normalizeHttpUrl(postUrl) == null) return BoardValidationError.PostUrl
+        if (!isValidFieldName(postField)) return BoardValidationError.PostField
+        if (infoField.isNotEmpty() && !isValidFieldName(infoField)) {
+            return BoardValidationError.InfoField
+        }
         return null
     }
 

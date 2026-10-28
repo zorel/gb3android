@@ -1,4 +1,213 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">gb3</string>
+
+    <!-- Setup -->
+    <string name="setup_tagline">Tribune and mouling agent</string>
+    <string name="setup_mode_server">gb2c server</string>
+    <string name="setup_mode_direct">Direct boards</string>
+    <string name="setup_server_url">gb2c server URL</string>
+    <string name="setup_server_url_optional">gb2c server URL (optional)</string>
+    <string name="setup_server_support">Plain http:// is supported for self-hosted servers on a LAN.</string>
+    <string name="setup_server_optional_support">Only used for totoz, emoji, attachments and LinuxFR login. Posts are sent straight to the selected boards.</string>
+    <string name="setup_nickname">Nickname (optional)</string>
+    <string name="setup_nickname_support">This is the info sent with your posts.</string>
+    <string name="setup_boards">Boards</string>
+    <string name="setup_boards_support">Selected boards are downloaded and posted to directly.</string>
+    <string name="setup_error_select_board">Select at least one board.</string>
+    <string name="setup_error_optional_server">Check the optional server URL.</string>
+    <string name="setup_error_server">Please enter a valid http(s) server URL.</string>
+    <string name="setup_connect">Connect</string>
+    <string name="setup_footer">gb3 is a KISS bouchot stack. Posts stream live while the app is in the foreground. All settings stay on this device.</string>
+
+    <!-- Main screen -->
+    <string name="main_open_menu">Open menu</string>
+    <string name="main_stream_live">live</string>
+    <string name="main_stream_sync">sync</string>
+    <string name="main_stream_offline">offline</string>
+    <string name="main_stream_description">Stream %1$s</string>
+    <string name="main_clock_description">Clock %1$s</string>
+    <string name="main_totoz_description">Totoz %1$s</string>
+    <string name="snackbar_cannot_open_link">Cannot open this link</string>
+    <string name="snackbar_unsupported_link">Unsupported link: %1$s</string>
+
+    <!-- Post list -->
+    <string name="posts_refreshing_boards">Refreshing boards…</string>
+    <string name="posts_connecting_to">Connecting to %1$s…</string>
+    <string name="posts_none_selected">No tribune selected</string>
+    <string name="posts_no_post_in">No post in %1$s</string>
+    <string name="posts_empty_direct_hint">Open the menu to retry or add a board in Settings.</string>
+    <string name="posts_empty_server_hint">Open the menu to retry or check the server URL in Settings.</string>
+    <string name="posts_swipe_hint">Swipe left or right to change tribune.</string>
+    <string name="action_retry">Retry</string>
+    <string name="action_jump_latest">Jump to latest posts</string>
+
+    <!-- Composer -->
+    <string name="composer_insert">Insert</string>
+    <string name="composer_clear_selection">Clear selection</string>
+    <string name="composer_tools">Post tools</string>
+    <string name="composer_message_to">Message to %1$s</string>
+    <string name="composer_send">Send message</string>
+
+    <!-- Menu and sheets -->
+    <string name="menu_totoz_search">Totoz search</string>
+    <string name="menu_emoji_search">Emoji search</string>
+    <string name="menu_attach">Attach a file</string>
+    <string name="menu_formatting">Formatting shortcuts</string>
+    <string name="menu_settings">Settings</string>
+    <string name="menu_mark_all_read">Mark all tribunes as read</string>
+    <string name="menu_reconnect">Reconnect live stream</string>
+    <string name="menu_about">About gb3</string>
+    <string name="alt_shortcuts_hint">The current selection is wrapped when a shortcut supports it.</string>
+    <string name="alt_blam">BLAM</string>
+    <string name="alt_moment">Moment</string>
+    <string name="alt_phi">φ</string>
+    <string name="alt_bold">Bold</string>
+    <string name="alt_italic">Italic</string>
+    <string name="alt_underline">Underline</string>
+    <string name="alt_strike">Strike</string>
+    <string name="alt_teletext">Teletext</string>
+    <string name="alt_code">Code</string>
+    <string name="alt_spoiler">Spoiler</string>
+    <string name="alt_paf">Paf</string>
+    <string name="alt_acappella">♪</string>
+    <string name="alt_last_posted">Last posted</string>
+    <string name="totoz_search_failed">Totoz search failed</string>
+    <string name="totoz_placeholder">dont be so vanilla</string>
+    <string name="totoz_search">Search totoz</string>
+    <string name="totoz_none">No totoz found.</string>
+    <string name="emoji_search_failed">Emoji search failed</string>
+    <string name="emoji_placeholder">poop</string>
+    <string name="emoji_search">Search emoji</string>
+    <string name="emoji_none">No emoji found.</string>
+    <string name="post_actions_title">Post %1$s</string>
+    <string name="post_actions_meta">%1$s · %2$s</string>
+    <string name="post_author">Author: %1$s</string>
+    <string name="post_login">Login: %1$s</string>
+    <string name="post_info">Info: %1$s</string>
+    <string name="action_reply">Reply</string>
+    <string name="action_copy_message">Copy message</string>
+    <string name="action_call_author">Call author</string>
+    <string name="action_select">Select</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="action_back">Back</string>
+    <string name="settings_connection">Connection</string>
+    <string name="settings_server_url">gb2c URL</string>
+    <string name="settings_server_url_optional">gb2c URL (optional, for totoz/emoji/LinuxFR)</string>
+    <string name="settings_server_direct_support">Boards are fetched and posted to directly; the server is only used for auxiliary services.</string>
+    <string name="settings_server_support">Changing the server reloads tribunes and conversation filters.</string>
+    <string name="settings_save">Save settings</string>
+    <string name="settings_refresh_boards">Refresh boards</string>
+    <string name="settings_refresh_tribunes">Refresh tribunes</string>
+    <string name="settings_error_save">Invalid server URL or board selection</string>
+    <string name="settings_identity">Identity</string>
+    <string name="settings_nickname">Nickname</string>
+    <string name="settings_nickname_support">Sent as the post info. Leave empty to generate one.</string>
+    <string name="settings_linuxfr_connected">LinuxFR connected as %1$s</string>
+    <string name="settings_linuxfr_unknown">unknown</string>
+    <string name="settings_linuxfr_not_connected">LinuxFR not connected</string>
+    <string name="settings_linuxfr_connect">Connect LinuxFR</string>
+    <string name="settings_linuxfr_reconnect">Reconnect</string>
+    <string name="settings_linuxfr_disconnect">Disconnect</string>
+    <string name="settings_linuxfr_note">LinuxFR is only required to post in the dlfp tribune.</string>
+    <string name="settings_tribunes">Tribunes</string>
+    <string name="settings_no_boards">No boards available. Add one below.</string>
+    <string name="settings_no_tribunes">No tribunes loaded yet. Save a valid server URL and refresh.</string>
+    <string name="settings_selected_boards">Selected boards are downloaded directly. Keep at least one.</string>
+    <string name="settings_selected_tribunes">Selected tribunes are streamed live. Keep at least one.</string>
+    <string name="settings_keep_one">Keep at least one tribune selected.</string>
+    <string name="settings_boards">Boards</string>
+    <string name="settings_boards_support">Built-in boards mirror gb2c\'s default list. Custom boards are read and posted to directly, without gb2c.</string>
+    <string name="settings_remove">Remove</string>
+    <string name="settings_builtin">built-in</string>
+    <string name="settings_add_board">Add custom board</string>
+    <string name="settings_conversation_filter">Conversation filter</string>
+    <string name="settings_hide_logins">Hide logins / user agents</string>
+    <string name="settings_hide_logins_placeholder">alice, Some bot UA</string>
+    <string name="settings_hide_logins_support">Comma separated. Replies to hidden posts are hidden too.</string>
+    <string name="settings_server_filter">Server-side filter: %1$s</string>
+    <string name="settings_filtered_conversations">Filtered conversations</string>
+    <string name="settings_hide_posts">Hide posts</string>
+    <string name="settings_gray_posts">Gray posts</string>
+    <string name="settings_plop_list">Plop list</string>
+    <string name="settings_identities_to_plop">Identities to plop</string>
+    <string name="settings_plop_placeholder">alice, bob</string>
+    <string name="settings_plop_support">Messages from these logins are replaced by a random plop word.</string>
+    <string name="settings_actions">Actions</string>
+    <string name="settings_reconnect_stream">Reconnect stream</string>
+    <string name="settings_mark_all_read">Mark all read</string>
+    <string name="settings_about">About gb3</string>
+
+    <!-- Custom board dialog -->
+    <string name="board_dialog_title">Add custom board</string>
+    <string name="board_name">Name</string>
+    <string name="board_backend_url">Backend TSV URL</string>
+    <string name="board_post_url">Post URL</string>
+    <string name="board_post_field">Post field</string>
+    <string name="board_info_field">Info field (optional)</string>
+    <string name="board_info_support">Leave empty to send the nickname in the User-Agent header, like gb2c.</string>
+    <string name="board_oauth">LinuxFR OAuth2 board</string>
+    <string name="board_duplicate">Could not add this board (duplicate name?)</string>
+    <string name="action_add">Add</string>
+    <string name="action_cancel">Cancel</string>
+
+    <!-- LinuxFR OAuth -->
+    <string name="linuxfr_connect_title">Connect LinuxFR</string>
+    <string name="linuxfr_unreadable">The LinuxFR server returned an unreadable token.</string>
+    <string name="linuxfr_instructions">Sign in on linuxfr.org. The app captures the token when the server redirects back to /linuxfr.html; it never sees your password.</string>
+    <string name="linuxfr_unreachable">Cannot reach LinuxFR authorisation: %1$s</string>
+
+    <!-- Snackbar messages -->
+    <string name="error_invalid_server">Invalid server URL</string>
+    <string name="error_no_board_selected">No board selected</string>
+    <string name="error_select_board">Select at least one board</string>
+    <string name="error_reconnect_board_background">Reconnect the app to resume the board refresh</string>
+    <string name="msg_refreshing_boards">Refreshing boards…</string>
+    <string name="error_reconnect_stream_background">Reconnect the app to resume the live stream</string>
+    <string name="msg_reconnecting">Reconnecting…</string>
+    <string name="error_list_tribunes">Cannot list tribunes: %1$s</string>
+    <string name="error_network">network error</string>
+    <string name="error_no_tribune_server">No tribune available on this server</string>
+    <string name="error_poll_stopped">Poll stream stopped</string>
+    <string name="error_cannot_read_board">Cannot read %1$s: %2$s</string>
+    <string name="msg_hidden_post">[message hidden]</string>
+    <string name="error_no_post_at">No post at %1$s</string>
+    <string name="error_post_gone">Post at %1$s is no longer available</string>
+    <string name="error_post_hidden">Post at %1$s is hidden by the conversation filter</string>
+    <string name="error_no_previous_message">No previously posted message</string>
+    <string name="error_unknown_board">Unknown board %1$s</string>
+    <string name="error_linuxfr_needs_server">LinuxFR needs a gb3 server URL to authorize; set one in Settings</string>
+    <string name="msg_connect_linuxfr">Connect your LinuxFR account to post there</string>
+    <string name="msg_posted_to">Posted to %1$s</string>
+    <string name="error_cannot_post">Cannot post message</string>
+    <string name="error_linuxfr_expired_no_server">LinuxFR session expired and no gb3 server is configured</string>
+    <string name="error_linuxfr_expired">LinuxFR session expired: %1$s</string>
+    <string name="error_reconnect">reconnect</string>
+    <string name="msg_settings_saved">Settings saved</string>
+    <string name="error_invalid_board">Invalid board: %1$s</string>
+    <string name="error_board_exists">A board named %1$s already exists</string>
+    <string name="msg_board_added">Board %1$s added</string>
+    <string name="error_builtin_board">Built-in boards cannot be removed</string>
+    <string name="msg_board_removed">Board %1$s removed</string>
+    <string name="error_connect_linuxfr_server">Set a gb3 server URL to connect LinuxFR</string>
+    <string name="msg_linuxfr_connected">Connected to LinuxFR as %1$s</string>
+    <string name="error_attachment_needs_server">Attachments need a gb3 server URL</string>
+    <string name="msg_attachment_uploaded">Attachment uploaded</string>
+    <string name="error_upload_attachment">Cannot upload attachment</string>
+    <string name="error_totoz_needs_server">Totoz search needs a gb3 server URL</string>
+    <string name="error_emoji_needs_server">Emoji search needs a gb3 server URL</string>
+    <string name="msg_all_read">All tribunes marked as read</string>
+    <string name="error_refresh_background">Cannot refresh while the app is in the background</string>
+    <string name="msg_linuxfr_disconnected">LinuxFR account disconnected</string>
+
+    <!-- Board validation -->
+    <string name="board_error_name_required">board name is required</string>
+    <string name="board_error_name_too_long">board name is too long</string>
+    <string name="board_error_name_invalid">board name cannot contain spaces, commas or control characters</string>
+    <string name="board_error_backend_url">backend URL must be a valid http(s) URL</string>
+    <string name="board_error_post_url">post URL must be a valid http(s) URL</string>
+    <string name="board_error_post_field">post field is required</string>
+    <string name="board_error_info_field">info field is invalid</string>
 </resources>

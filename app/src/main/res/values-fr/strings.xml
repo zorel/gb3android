@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">gb3</string>
+
+    <!-- Setup -->
+    <string name="setup_tagline">Agente de tribunes et de moulage</string>
+    <string name="setup_mode_server">Serveur gb2c</string>
+    <string name="setup_mode_direct">Tribunes directes</string>
+    <string name="setup_server_url">URL du serveur gb2c</string>
+    <string name="setup_server_url_optional">URL du serveur gb2c (facultative)</string>
+    <string name="setup_server_support">http:// est accepté pour les serveurs auto-hébergés sur un réseau local.</string>
+    <string name="setup_server_optional_support">Utilisée uniquement pour les totoz, les emoji, les pièces jointes et la connexion LinuxFR. Les messages sont publiés directement dans les tribunes sélectionnées.</string>
+    <string name="setup_nickname">Pseudo (facultatif)</string>
+    <string name="setup_nickname_support">C’est l’info envoyée avec vos messages.</string>
+    <string name="setup_boards">Tribunes</string>
+    <string name="setup_boards_support">Les tribunes sélectionnées sont lues et publiées directement.</string>
+    <string name="setup_error_select_board">Sélectionnez au moins une tribune.</string>
+    <string name="setup_error_optional_server">Vérifiez l’URL facultative du serveur.</string>
+    <string name="setup_error_server">Saisissez une URL de serveur http(s) valide.</string>
+    <string name="setup_connect">Se connecter</string>
+    <string name="setup_footer">gb3 est une pile bouchot KISS. Les messages arrivent en direct lorsque l’application est au premier plan. Tous les réglages restent sur cet appareil.</string>
+
+    <!-- Main screen -->
+    <string name="main_open_menu">Ouvrir le menu</string>
+    <string name="main_stream_live">direct</string>
+    <string name="main_stream_sync">synchro</string>
+    <string name="main_stream_offline">hors ligne</string>
+    <string name="main_stream_description">Flux %1$s</string>
+    <string name="main_clock_description">Horloge %1$s</string>
+    <string name="main_totoz_description">Totoz %1$s</string>
+    <string name="snackbar_cannot_open_link">Impossible d’ouvrir ce lien</string>
+    <string name="snackbar_unsupported_link">Lien non pris en charge : %1$s</string>
+
+    <!-- Post list -->
+    <string name="posts_refreshing_boards">Actualisation des tribunes…</string>
+    <string name="posts_connecting_to">Connexion à %1$s…</string>
+    <string name="posts_none_selected">Aucune tribune sélectionnée</string>
+    <string name="posts_no_post_in">Aucun message dans %1$s</string>
+    <string name="posts_empty_direct_hint">Ouvrez le menu pour réessayer ou ajouter une tribune dans les réglages.</string>
+    <string name="posts_empty_server_hint">Ouvrez le menu pour réessayer ou vérifier l’URL du serveur dans les réglages.</string>
+    <string name="posts_swipe_hint">Glissez à gauche ou à droite pour changer de tribune.</string>
+    <string name="action_retry">Réessayer</string>
+    <string name="action_jump_latest">Aller aux derniers messages</string>
+
+    <!-- Composer -->
+    <string name="composer_insert">Insérer</string>
+    <string name="composer_clear_selection">Effacer la sélection</string>
+    <string name="composer_tools">Outils de publication</string>
+    <string name="composer_message_to">Message pour %1$s</string>
+    <string name="composer_send">Envoyer le message</string>
+
+    <!-- Menu and sheets -->
+    <string name="menu_totoz_search">Recherche de totoz</string>
+    <string name="menu_emoji_search">Recherche d’emoji</string>
+    <string name="menu_attach">Joindre un fichier</string>
+    <string name="menu_formatting">Raccourcis de mise en forme</string>
+    <string name="menu_settings">Réglages</string>
+    <string name="menu_mark_all_read">Marquer toutes les tribunes comme lues</string>
+    <string name="menu_reconnect">Reconnecter le flux en direct</string>
+    <string name="menu_about">À propos de gb3</string>
+    <string name="alt_shortcuts_hint">La sélection actuelle est entourée lorsqu’un raccourci le permet.</string>
+    <string name="alt_blam">BLAM</string>
+    <string name="alt_moment">Moment</string>
+    <string name="alt_phi">φ</string>
+    <string name="alt_bold">Gras</string>
+    <string name="alt_italic">Italique</string>
+    <string name="alt_underline">Souligné</string>
+    <string name="alt_strike">Barré</string>
+    <string name="alt_teletext">Télétexte</string>
+    <string name="alt_code">Code</string>
+    <string name="alt_spoiler">Spoiler</string>
+    <string name="alt_paf">Paf</string>
+    <string name="alt_acappella">♪</string>
+    <string name="alt_last_posted">Dernier message</string>
+    <string name="totoz_search_failed">La recherche de totoz a échoué</string>
+    <string name="totoz_placeholder">sois moins sage</string>
+    <string name="totoz_search">Rechercher des totoz</string>
+    <string name="totoz_none">Aucun totoz trouvé.</string>
+    <string name="emoji_search_failed">La recherche d’emoji a échoué</string>
+    <string name="emoji_placeholder">caca</string>
+    <string name="emoji_search">Rechercher des emoji</string>
+    <string name="emoji_none">Aucun emoji trouvé.</string>
+    <string name="post_actions_title">Message %1$s</string>
+    <string name="post_actions_meta">%1$s · %2$s</string>
+    <string name="post_author">Auteur : %1$s</string>
+    <string name="post_login">Identifiant : %1$s</string>
+    <string name="post_info">Info : %1$s</string>
+    <string name="action_reply">Répondre</string>
+    <string name="action_copy_message">Copier le message</string>
+    <string name="action_call_author">Interpeller l’auteur</string>
+    <string name="action_select">Sélectionner</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Réglages</string>
+    <string name="action_back">Retour</string>
+    <string name="settings_connection">Connexion</string>
+    <string name="settings_server_url">URL gb2c</string>
+    <string name="settings_server_url_optional">URL gb2c (facultative, pour totoz/emoji/LinuxFR)</string>
+    <string name="settings_server_direct_support">Les tribunes sont lues et publiées directement ; le serveur ne sert qu’aux services auxiliaires.</string>
+    <string name="settings_server_support">Changer de serveur recharge les tribunes et les filtres de conversation.</string>
+    <string name="settings_save">Enregistrer les réglages</string>
+    <string name="settings_refresh_boards">Actualiser les tribunes</string>
+    <string name="settings_refresh_tribunes">Actualiser les tribunes</string>
+    <string name="settings_error_save">URL de serveur ou sélection de tribunes invalide</string>
+    <string name="settings_identity">Identité</string>
+    <string name="settings_nickname">Pseudo</string>
+    <string name="settings_nickname_support">Envoyé comme info du message. Laissez vide pour en générer un.</string>
+    <string name="settings_linuxfr_connected">LinuxFR connecté en tant que %1$s</string>
+    <string name="settings_linuxfr_unknown">inconnu</string>
+    <string name="settings_linuxfr_not_connected">LinuxFR non connecté</string>
+    <string name="settings_linuxfr_connect">Connecter LinuxFR</string>
+    <string name="settings_linuxfr_reconnect">Reconnecter</string>
+    <string name="settings_linuxfr_disconnect">Déconnecter</string>
+    <string name="settings_linuxfr_note">LinuxFR n’est nécessaire que pour publier dans la tribune dlfp.</string>
+    <string name="settings_tribunes">Tribunes</string>
+    <string name="settings_no_boards">Aucune tribune disponible. Ajoutez-en une ci-dessous.</string>
+    <string name="settings_no_tribunes">Aucune tribune chargée. Enregistrez une URL de serveur valide et actualisez.</string>
+    <string name="settings_selected_boards">Les tribunes sélectionnées sont lues directement. Gardez-en au moins une.</string>
+    <string name="settings_selected_tribunes">Les tribunes sélectionnées sont diffusées en direct. Gardez-en au moins une.</string>
+    <string name="settings_keep_one">Gardez au moins une tribune sélectionnée.</string>
+    <string name="settings_boards">Tribunes</string>
+    <string name="settings_boards_support">Les tribunes intégrées reprennent la liste par défaut de gb2c. Les tribunes personnalisées sont lues et publiées directement, sans gb2c.</string>
+    <string name="settings_remove">Supprimer</string>
+    <string name="settings_builtin">intégrée</string>
+    <string name="settings_add_board">Ajouter une tribune personnalisée</string>
+    <string name="settings_conversation_filter">Filtre de conversation</string>
+    <string name="settings_hide_logins">Masquer les identifiants / agents utilisateur</string>
+    <string name="settings_hide_logins_placeholder">alice, Un agent de bot</string>
+    <string name="settings_hide_logins_support">Séparés par des virgules. Les réponses aux messages masqués le sont aussi.</string>
+    <string name="settings_server_filter">Filtre côté serveur : %1$s</string>
+    <string name="settings_filtered_conversations">Conversations filtrées</string>
+    <string name="settings_hide_posts">Masquer les messages</string>
+    <string name="settings_gray_posts">Griser les messages</string>
+    <string name="settings_plop_list">Liste plop</string>
+    <string name="settings_identities_to_plop">Identités à plopper</string>
+    <string name="settings_plop_placeholder">alice, bob</string>
+    <string name="settings_plop_support">Les messages de ces identifiants sont remplacés par un mot plop aléatoire.</string>
+    <string name="settings_actions">Actions</string>
+    <string name="settings_reconnect_stream">Reconnecter le flux</string>
+    <string name="settings_mark_all_read">Tout marquer comme lu</string>
+    <string name="settings_about">À propos de gb3</string>
+
+    <!-- Custom board dialog -->
+    <string name="board_dialog_title">Ajouter une tribune personnalisée</string>
+    <string name="board_name">Nom</string>
+    <string name="board_backend_url">URL du backend TSV</string>
+    <string name="board_post_url">URL de publication</string>
+    <string name="board_post_field">Champ du message</string>
+    <string name="board_info_field">Champ info (facultatif)</string>
+    <string name="board_info_support">Laissez vide pour envoyer le pseudo dans l’en-tête User-Agent, comme gb2c.</string>
+    <string name="board_oauth">Tribune LinuxFR OAuth2</string>
+    <string name="board_duplicate">Impossible d’ajouter cette tribune (nom en double ?)</string>
+    <string name="action_add">Ajouter</string>
+    <string name="action_cancel">Annuler</string>
+
+    <!-- LinuxFR OAuth -->
+    <string name="linuxfr_connect_title">Connecter LinuxFR</string>
+    <string name="linuxfr_unreadable">Le serveur LinuxFR a renvoyé un jeton illisible.</string>
+    <string name="linuxfr_instructions">Connectez-vous sur linuxfr.org. L’application récupère le jeton lorsque le serveur redirige vers /linuxfr.html ; elle ne voit jamais votre mot de passe.</string>
+    <string name="linuxfr_unreachable">Impossible de joindre l’autorisation LinuxFR : %1$s</string>
+
+    <!-- Snackbar messages -->
+    <string name="error_invalid_server">URL de serveur invalide</string>
+    <string name="error_no_board_selected">Aucune tribune sélectionnée</string>
+    <string name="error_select_board">Sélectionnez au moins une tribune</string>
+    <string name="error_reconnect_board_background">Revenez dans l’application pour reprendre l’actualisation des tribunes</string>
+    <string name="msg_refreshing_boards">Actualisation des tribunes…</string>
+    <string name="error_reconnect_stream_background">Revenez dans l’application pour reprendre le flux en direct</string>
+    <string name="msg_reconnecting">Reconnexion…</string>
+    <string name="error_list_tribunes">Impossible de lister les tribunes : %1$s</string>
+    <string name="error_network">erreur réseau</string>
+    <string name="error_no_tribune_server">Aucune tribune disponible sur ce serveur</string>
+    <string name="error_poll_stopped">Le flux en direct s’est arrêté</string>
+    <string name="error_cannot_read_board">Impossible de lire %1$s : %2$s</string>
+    <string name="msg_hidden_post">[message masqué]</string>
+    <string name="error_no_post_at">Aucun message à %1$s</string>
+    <string name="error_post_gone">Le message à %1$s n’est plus disponible</string>
+    <string name="error_post_hidden">Le message à %1$s est masqué par le filtre de conversation</string>
+    <string name="error_no_previous_message">Aucun message précédemment publié</string>
+    <string name="error_unknown_board">Tribune inconnue %1$s</string>
+    <string name="error_linuxfr_needs_server">LinuxFR nécessite une URL de serveur gb3 pour l’autorisation ; renseignez-la dans les réglages</string>
+    <string name="msg_connect_linuxfr">Connectez votre compte LinuxFR pour publier ici</string>
+    <string name="msg_posted_to">Publié dans %1$s</string>
+    <string name="error_cannot_post">Impossible de publier le message</string>
+    <string name="error_linuxfr_expired_no_server">La session LinuxFR a expiré et aucun serveur gb3 n’est configuré</string>
+    <string name="error_linuxfr_expired">La session LinuxFR a expiré : %1$s</string>
+    <string name="error_reconnect">reconnectez-vous</string>
+    <string name="msg_settings_saved">Réglages enregistrés</string>
+    <string name="error_invalid_board">Tribune invalide : %1$s</string>
+    <string name="error_board_exists">Une tribune nommée %1$s existe déjà</string>
+    <string name="msg_board_added">Tribune %1$s ajoutée</string>
+    <string name="error_builtin_board">Les tribunes intégrées ne peuvent pas être supprimées</string>
+    <string name="msg_board_removed">Tribune %1$s supprimée</string>
+    <string name="error_connect_linuxfr_server">Renseignez une URL de serveur gb3 pour connecter LinuxFR</string>
+    <string name="msg_linuxfr_connected">Connecté à LinuxFR en tant que %1$s</string>
+    <string name="error_attachment_needs_server">Les pièces jointes nécessitent une URL de serveur gb3</string>
+    <string name="msg_attachment_uploaded">Pièce jointe envoyée</string>
+    <string name="error_upload_attachment">Impossible d’envoyer la pièce jointe</string>
+    <string name="error_totoz_needs_server">La recherche de totoz nécessite une URL de serveur gb3</string>
+    <string name="error_emoji_needs_server">La recherche d’emoji nécessite une URL de serveur gb3</string>
+    <string name="msg_all_read">Toutes les tribunes sont marquées comme lues</string>
+    <string name="error_refresh_background">Impossible d’actualiser lorsque l’application est en arrière-plan</string>
+    <string name="msg_linuxfr_disconnected">Compte LinuxFR déconnecté</string>
+
+    <!-- Board validation -->
+    <string name="board_error_name_required">le nom de la tribune est requis</string>
+    <string name="board_error_name_too_long">le nom de la tribune est trop long</string>
+    <string name="board_error_name_invalid">le nom de la tribune ne peut pas contenir d’espaces, de virgules ou de caractères de contrôle</string>
+    <string name="board_error_backend_url">l’URL du backend doit être une URL http(s) valide</string>
+    <string name="board_error_post_url">l’URL de publication doit être une URL http(s) valide</string>
+    <string name="board_error_post_field">le champ du message est requis</string>
+    <string name="board_error_info_field">le champ info est invalide</string>
+</resources>

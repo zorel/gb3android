@@ -38,6 +38,7 @@ The client covers the feature set of `gb3tui` and `gc2`, adapted to touch:
 - totoz search with image grid and preview, emoji search, attachment upload
   (4 MiB server limit) and the ALT formatting shortcuts;
 - plop-list message replacement;
+- English and French UI, following the Android system language;
 - light/dark Material 3 theme following the system, with the gc2 palette;
 - the alarm clock that counts seconds during the last minute of each hour.
 
