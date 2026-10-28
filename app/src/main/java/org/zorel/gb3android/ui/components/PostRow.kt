@@ -12,11 +12,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.LinkAnnotation
@@ -64,24 +66,6 @@ fun PostRow(
     // same flow. Doing the same here is what makes a phone screen show a useful
     // amount of the tribune.
     val prefix = buildAnnotatedString {
-        display.marker?.let { marker ->
-            withStyle(
-                SpanStyle(
-                    color = conversationColor ?: colors.onSurfaceVariant,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
-                ),
-            ) {
-                append(marker)
-                append(' ')
-            }
-        }
-        when {
-            display.isMine -> withStyle(SpanStyle(color = palette.mine)) { append("⭐ ") }
-            display.isReply -> withStyle(SpanStyle(color = palette.reply)) { append("↩ ") }
-            display.isBigorno -> withStyle(SpanStyle(color = palette.bigorno)) { append("📢 ") }
-        }
         val clockStyle = if (selected) {
             SpanStyle(
                 color = colors.onPrimary,
@@ -124,6 +108,18 @@ fun PostRow(
         append("  ")
     }
 
+    val status = when {
+        display.isMine -> "⭐"
+        display.isReply -> "↩"
+        display.isBigorno -> "📢"
+        else -> ""
+    }
+    val statusColor = when {
+        display.isMine -> palette.mine
+        display.isReply -> palette.reply
+        else -> palette.bigorno
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -136,10 +132,27 @@ fun PostRow(
     ) {
         Box(
             modifier = Modifier
-                .width(if (conversationColor != null) 2.dp else 1.dp)
+                .width(if (conversationColor != null) 4.dp else 1.dp)
                 .fillMaxHeight()
                 .background(conversationColor ?: Color.Transparent),
         )
+        // Reserve a stable slot so clocks and authors stay aligned whether a
+        // post is mine, replies to me or contains a bigorno.
+        Box(
+            modifier = Modifier
+                .width(18.dp)
+                .fillMaxHeight()
+                .padding(top = 2.dp),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            if (status.isNotEmpty()) {
+                Text(
+                    text = status,
+                    color = statusColor,
+                    fontSize = 12.sp,
+                )
+            }
+        }
         MessageText(
             parsed = display.parsed,
             fromPostKey = post.key,

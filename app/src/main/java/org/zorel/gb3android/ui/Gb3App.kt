@@ -45,7 +45,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -59,9 +61,11 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import org.zorel.gb3android.R
 import org.zorel.gb3android.data.Post
 import org.zorel.gb3android.data.Screen
 import org.zorel.gb3android.data.TextDraft
+import org.zorel.gb3android.data.TotozServer
 import org.zorel.gb3android.ui.components.AltSheet
 import org.zorel.gb3android.ui.components.Composer
 import org.zorel.gb3android.ui.components.EmojiSheet
@@ -96,6 +100,7 @@ fun Gb3App(viewModel: Gb3ViewModel) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
     var sheet by remember { mutableStateOf<ActiveSheet?>(null) }
     var totozPreview by remember { mutableStateOf<String?>(null) }
 
@@ -134,10 +139,16 @@ fun Gb3App(viewModel: Gb3ViewModel) {
     fun openExternal(url: String) {
         if (url.startsWith("http://") || url.startsWith("https://")) {
             runCatching { uriHandler.openUri(url) }.onFailure {
-                scope.launch { snackbarHostState.showSnackbar("Cannot open this link") }
+                scope.launch {
+                    snackbarHostState.showSnackbar(context.getString(R.string.snackbar_cannot_open_link))
+                }
             }
         } else {
-            scope.launch { snackbarHostState.showSnackbar("Unsupported link: $url") }
+            scope.launch {
+                snackbarHostState.showSnackbar(
+                    context.getString(R.string.snackbar_unsupported_link, url),
+                )
+            }
         }
     }
 
@@ -153,7 +164,7 @@ fun Gb3App(viewModel: Gb3ViewModel) {
         Surface(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.fillMaxSize()) {
                 when {
-                    state.setupRequired || state.serverUrl.isBlank() -> {
+                    state.setupRequired || (!state.directBoards && state.serverUrl.isBlank()) -> {
                         SetupScreen(state = state, onConnect = viewModel::saveSettings)
                     }
 
@@ -167,6 +178,8 @@ fun Gb3App(viewModel: Gb3ViewModel) {
                             onMarkAllRead = viewModel::markAllRead,
                             onReconnect = viewModel::reconnect,
                             onRefresh = viewModel::refreshServerInfo,
+                            onAddBoard = viewModel::addCustomBoard,
+                            onRemoveBoard = viewModel::removeCustomBoard,
                         )
                     }
 
@@ -212,6 +225,7 @@ fun Gb3App(viewModel: Gb3ViewModel) {
                 totozPreview?.let { name ->
                     TotozImageOverlay(
                         name = name,
+                        serverUrl = state.totozServerUrl.ifBlank { TotozServer.DEFAULT_URL },
                         onDismiss = { totozPreview = null },
                     )
                 }
@@ -301,7 +315,7 @@ private fun MainScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "gb3",
+                text = stringResource(R.string.app_name),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = colors.primary,
@@ -333,7 +347,7 @@ private fun MainScreen(
                 onClick = onMenu,
                 modifier = Modifier.size(40.dp),
             ) {
-                Icon(Icons.Default.MoreVert, contentDescription = "Open menu")
+                Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.main_open_menu))
             }
         }
         TribuneBar(
@@ -379,21 +393,22 @@ private fun ConnectionStatus(state: UiState) {
     when {
         state.connected -> {
             color = colors.secondary
-            label = "live"
+            label = stringResource(R.string.main_stream_live)
         }
         state.connecting -> {
             color = colors.tertiary
-            label = "sync"
+            label = stringResource(R.string.main_stream_sync)
         }
         else -> {
             color = colors.error
-            label = "offline"
+            label = stringResource(R.string.main_stream_offline)
         }
     }
+    val description = stringResource(R.string.main_stream_description, label)
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
-        modifier = Modifier.semantics { contentDescription = "Stream $label" },
+        modifier = Modifier.semantics { contentDescription = description },
     ) {
         Box(
             modifier = Modifier
@@ -422,8 +437,10 @@ private fun AlarmClock() {
     val formatter = remember(preums) {
         DateTimeFormatter.ofPattern(if (preums) "HH:mm:ss" else "HH:mm")
     }
+    val label = now.format(formatter)
+    val description = stringResource(R.string.main_clock_description, label)
     Text(
-        text = now.format(formatter),
+        text = label,
         fontFamily = FontFamily.Monospace,
         fontWeight = FontWeight.Bold,
         fontSize = 14.sp,
@@ -432,7 +449,7 @@ private fun AlarmClock() {
         modifier = Modifier
             .width(68.dp)
             .semantics {
-                contentDescription = "Clock ${now.format(formatter)}"
+                contentDescription = description
             },
     )
 }
@@ -440,6 +457,7 @@ private fun AlarmClock() {
 @Composable
 private fun TotozImageOverlay(
     name: String,
+    serverUrl: String,
     onDismiss: () -> Unit,
 ) {
     BackHandler(onBack = onDismiss)
@@ -457,8 +475,9 @@ private fun TotozImageOverlay(
         contentAlignment = Alignment.Center,
     ) {
         AsyncImage(
-            model = "https://nsfw.totoz.eu/img/" + Uri.encode(name),
-            contentDescription = "Totoz $name",
+            model = TotozServer.imageUrl(serverUrl, name)
+                ?: "${TotozServer.DEFAULT_URL}/img/${Uri.encode(name)}",
+            contentDescription = stringResource(R.string.main_totoz_description, name),
             contentScale = ContentScale.Fit,
             modifier = Modifier
                 .fillMaxWidth(0.92f)

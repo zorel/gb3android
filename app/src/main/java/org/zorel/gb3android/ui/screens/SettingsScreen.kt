@@ -11,9 +11,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
@@ -24,6 +27,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -38,9 +42,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import org.zorel.gb3android.R
 import org.zorel.gb3android.data.BlockedDisplayMode
+import org.zorel.gb3android.data.Board
+import org.zorel.gb3android.data.BoardAuth
+import org.zorel.gb3android.data.BoardValidationError
+import org.zorel.gb3android.data.ConnectionMode
+import org.zorel.gb3android.data.TotozServer
 import org.zorel.gb3android.data.csvSet
 import org.zorel.gb3android.ui.SettingsInput
 import org.zorel.gb3android.ui.UiState
@@ -56,22 +68,33 @@ fun SettingsScreen(
     onMarkAllRead: () -> Unit,
     onReconnect: () -> Unit,
     onRefresh: () -> Unit,
+    onAddBoard: (Board) -> Boolean,
+    onRemoveBoard: (String) -> Boolean,
 ) {
     var serverUrl by rememberSaveable { mutableStateOf(state.serverUrl) }
+    var totozServerUrl by rememberSaveable { mutableStateOf(state.totozServerUrl) }
     var nickname by rememberSaveable { mutableStateOf(state.nickname) }
     var selectedCsv by rememberSaveable { mutableStateOf(state.tribunes.joinToString(",")) }
     var blocked by rememberSaveable { mutableStateOf(state.localBlocked.joinToString(",")) }
     var displayModeName by rememberSaveable { mutableStateOf(state.displayMode.name) }
     var plopList by rememberSaveable { mutableStateOf(state.plopList.joinToString(",")) }
+    var modeName by rememberSaveable { mutableStateOf(state.connectionMode.name) }
     var error by remember { mutableStateOf<String?>(null) }
     var selectionError by remember { mutableStateOf<String?>(null) }
+    var showBoardDialog by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
+    val directMode = modeName == ConnectionMode.DirectBoards.name
+    val boardNames = state.boards.map { it.name }
+    val saveErrorMessage = stringResource(R.string.settings_error_save)
+    val keepOneMessage = stringResource(R.string.settings_keep_one)
 
     LaunchedEffect(state.tribunes) {
         selectedCsv = state.tribunes.joinToString(",")
     }
 
-    val options = if (state.availableTribunes.isNotEmpty()) {
+    val options = if (directMode) {
+        boardNames.sorted()
+    } else if (state.availableTribunes.isNotEmpty()) {
         state.availableTribunes
     } else {
         state.tribunes
@@ -81,10 +104,13 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text(stringResource(R.string.settings_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_back),
+                        )
                     }
                 },
             )
@@ -98,17 +124,56 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item {
-                SettingsSection("Server") {
+                SettingsSection(stringResource(R.string.settings_connection)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = !directMode,
+                            onClick = {
+                                modeName = ConnectionMode.Server.name
+                                selectedCsv = state.tribunes.joinToString(",")
+                            },
+                            label = { Text(stringResource(R.string.setup_mode_server)) },
+                        )
+                        FilterChip(
+                            selected = directMode,
+                            onClick = {
+                                modeName = ConnectionMode.DirectBoards.name
+                                val current = selectedCsv.csvSet()
+                                if (current.none { it in boardNames }) {
+                                    selectedCsv = boardNames.sorted().joinToString(",")
+                                }
+                            },
+                            label = { Text(stringResource(R.string.setup_mode_direct)) },
+                        )
+                    }
                     androidx.compose.material3.OutlinedTextField(
                         value = serverUrl,
                         onValueChange = { serverUrl = it },
-                        label = { Text("gb2c URL") },
+                        label = {
+                            Text(
+                                stringResource(
+                                    if (directMode) {
+                                        R.string.settings_server_url_optional
+                                    } else {
+                                        R.string.settings_server_url
+                                    },
+                                ),
+                            )
+                        },
                         placeholder = { Text("https://gb3.example.com") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                         modifier = Modifier.fillMaxWidth(),
                         supportingText = {
-                            Text("Changing the server reloads tribunes and conversation filters.")
+                            Text(
+                                stringResource(
+                                    if (directMode) {
+                                        R.string.settings_server_direct_support
+                                    } else {
+                                        R.string.settings_server_support
+                                    },
+                                ),
+                            )
                         },
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -116,6 +181,12 @@ fun SettingsScreen(
                             val ok = onSave(
                                 SettingsInput(
                                     serverUrl = serverUrl,
+                                    connectionMode = if (directMode) {
+                                        ConnectionMode.DirectBoards
+                                    } else {
+                                        ConnectionMode.Server
+                                    },
+                                    totozServerUrl = totozServerUrl,
                                     nickname = nickname,
                                     selectedTribunes = selected,
                                     blockedIdentities = blocked,
@@ -123,12 +194,20 @@ fun SettingsScreen(
                                     plopList = plopList,
                                 ),
                             )
-                            if (!ok) error = "Invalid server URL"
+                            if (!ok) error = saveErrorMessage
                         }) {
-                            Text("Save settings")
+                            Text(stringResource(R.string.settings_save))
                         }
                         OutlinedButton(onClick = onRefresh) {
-                            Text("Refresh tribunes")
+                            Text(
+                                stringResource(
+                                    if (directMode) {
+                                        R.string.settings_refresh_boards
+                                    } else {
+                                        R.string.settings_refresh_tribunes
+                                    },
+                                ),
+                            )
                         }
                     }
                     error?.let {
@@ -142,35 +221,48 @@ fun SettingsScreen(
             }
 
             item {
-                SettingsSection("Identity") {
+                SettingsSection(stringResource(R.string.settings_identity)) {
                     androidx.compose.material3.OutlinedTextField(
                         value = nickname,
                         onValueChange = { nickname = it },
-                        label = { Text("Nickname") },
+                        label = { Text(stringResource(R.string.settings_nickname)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         supportingText = {
-                            Text("Sent as the post info. Leave empty to generate one.")
+                            Text(stringResource(R.string.settings_nickname_support))
                         },
                     )
                     Text(
                         text = state.linuxfr?.let {
-                            "LinuxFR connected as ${it.login.ifBlank { "unknown" }}"
-                        } ?: "LinuxFR not connected",
+                            stringResource(
+                                R.string.settings_linuxfr_connected,
+                                it.login.ifBlank {
+                                    stringResource(R.string.settings_linuxfr_unknown)
+                                },
+                            )
+                        } ?: stringResource(R.string.settings_linuxfr_not_connected),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = onConnectLinuxfr) {
-                            Text(if (state.linuxfr == null) "Connect LinuxFR" else "Reconnect")
+                            Text(
+                                stringResource(
+                                    if (state.linuxfr == null) {
+                                        R.string.settings_linuxfr_connect
+                                    } else {
+                                        R.string.settings_linuxfr_reconnect
+                                    },
+                                ),
+                            )
                         }
                         if (state.linuxfr != null) {
                             TextButton(onClick = onDisconnectLinuxfr) {
-                                Text("Disconnect")
+                                Text(stringResource(R.string.settings_linuxfr_disconnect))
                             }
                         }
                     }
                     Text(
-                        text = "LinuxFR is only required to post in the dlfp tribune.",
+                        text = stringResource(R.string.settings_linuxfr_note),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -178,16 +270,45 @@ fun SettingsScreen(
             }
 
             item {
-                SettingsSection("Tribunes") {
+                SettingsSection(stringResource(R.string.settings_services)) {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = totozServerUrl,
+                        onValueChange = { totozServerUrl = it },
+                        label = { Text(stringResource(R.string.settings_totoz_server)) },
+                        placeholder = { Text(TotozServer.DEFAULT_URL) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                        modifier = Modifier.fillMaxWidth(),
+                        supportingText = {
+                            Text(stringResource(R.string.settings_totoz_server_support))
+                        },
+                    )
+                }
+            }
+
+            item {
+                SettingsSection(stringResource(R.string.settings_tribunes)) {
                     if (options.isEmpty()) {
                         Text(
-                            text = "No tribunes loaded yet. Save a valid server URL and refresh.",
+                            text = stringResource(
+                                if (directMode) {
+                                    R.string.settings_no_boards
+                                } else {
+                                    R.string.settings_no_tribunes
+                                },
+                            ),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     } else {
                         Text(
-                            text = "Selected tribunes are streamed live. Keep at least one.",
+                            text = stringResource(
+                                if (directMode) {
+                                    R.string.settings_selected_boards
+                                } else {
+                                    R.string.settings_selected_tribunes
+                                },
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -204,7 +325,7 @@ fun SettingsScreen(
                                         val current = selectedCsv.csvSet()
                                         val next = if (checked) current + tribune else current - tribune
                                         if (next.isEmpty()) {
-                                            selectionError = "Keep at least one tribune selected."
+                                            selectionError = keepOneMessage
                                         } else {
                                             selectionError = null
                                             selectedCsv = next.joinToString(",")
@@ -232,66 +353,119 @@ fun SettingsScreen(
             }
 
             item {
-                SettingsSection("Conversation filter") {
+                SettingsSection(stringResource(R.string.settings_boards)) {
+                    Text(
+                        text = stringResource(R.string.settings_boards_support),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    state.boards.forEach { board ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = board.name,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                )
+                                Text(
+                                    text = board.backendUrl,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            if (!board.predefined) {
+                                TextButton(onClick = { onRemoveBoard(board.name) }) {
+                                    Text(stringResource(R.string.settings_remove))
+                                }
+                            } else {
+                                Text(
+                                    text = stringResource(R.string.settings_builtin),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                    OutlinedButton(onClick = { showBoardDialog = true }) {
+                        Text(stringResource(R.string.settings_add_board))
+                    }
+                }
+            }
+
+            item {
+                SettingsSection(stringResource(R.string.settings_conversation_filter)) {
                     androidx.compose.material3.OutlinedTextField(
                         value = blocked,
                         onValueChange = { blocked = it },
-                        label = { Text("Hide logins / user agents") },
-                        placeholder = { Text("alice, Some bot UA") },
+                        label = { Text(stringResource(R.string.settings_hide_logins)) },
+                        placeholder = {
+                            Text(stringResource(R.string.settings_hide_logins_placeholder))
+                        },
                         minLines = 2,
                         maxLines = 4,
                         modifier = Modifier.fillMaxWidth(),
                         supportingText = {
-                            Text("Comma separated. Replies to hidden posts are hidden too.")
+                            Text(stringResource(R.string.settings_hide_logins_support))
                         },
                     )
                     if (state.serverBlocked.isNotEmpty()) {
                         Text(
-                            text = "Server-side filter: ${state.serverBlocked.joinToString(", ")}",
+                            text = stringResource(
+                                R.string.settings_server_filter,
+                                state.serverBlocked.joinToString(", "),
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     Text(
-                        text = "Filtered conversations",
+                        text = stringResource(R.string.settings_filtered_conversations),
                         style = MaterialTheme.typography.labelLarge,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
                             selected = displayModeName == BlockedDisplayMode.Hide.name,
                             onClick = { displayModeName = BlockedDisplayMode.Hide.name },
-                            label = { Text("Hide posts") },
+                            label = { Text(stringResource(R.string.settings_hide_posts)) },
                         )
                         FilterChip(
                             selected = displayModeName == BlockedDisplayMode.Gray.name,
                             onClick = { displayModeName = BlockedDisplayMode.Gray.name },
-                            label = { Text("Gray posts") },
+                            label = { Text(stringResource(R.string.settings_gray_posts)) },
                         )
                     }
                 }
             }
 
             item {
-                SettingsSection("Plop list") {
+                SettingsSection(stringResource(R.string.settings_plop_list)) {
                     androidx.compose.material3.OutlinedTextField(
                         value = plopList,
                         onValueChange = { plopList = it },
-                        label = { Text("Identities to plop") },
-                        placeholder = { Text("alice, bob") },
+                        label = { Text(stringResource(R.string.settings_identities_to_plop)) },
+                        placeholder = { Text(stringResource(R.string.settings_plop_placeholder)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         supportingText = {
-                            Text("Messages from these logins are replaced by a random plop word.")
+                            Text(stringResource(R.string.settings_plop_support))
                         },
                     )
                 }
             }
 
             item {
-                SettingsSection("Actions") {
+                SettingsSection(stringResource(R.string.settings_actions)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = onReconnect) { Text("Reconnect stream") }
-                        OutlinedButton(onClick = onMarkAllRead) { Text("Mark all read") }
+                        OutlinedButton(onClick = onReconnect) {
+                            Text(stringResource(R.string.settings_reconnect_stream))
+                        }
+                        OutlinedButton(onClick = onMarkAllRead) {
+                            Text(stringResource(R.string.settings_mark_all_read))
+                        }
                     }
                     HorizontalDivider()
                     TextButton(
@@ -301,7 +475,7 @@ fun SettingsScreen(
                             }
                         },
                     ) {
-                        Text("About gb3")
+                        Text(stringResource(R.string.settings_about))
                     }
                 }
             }
@@ -312,6 +486,12 @@ fun SettingsScreen(
                         val ok = onSave(
                             SettingsInput(
                                 serverUrl = serverUrl,
+                                connectionMode = if (directMode) {
+                                    ConnectionMode.DirectBoards
+                                } else {
+                                    ConnectionMode.Server
+                                },
+                                totozServerUrl = totozServerUrl,
                                 nickname = nickname,
                                 selectedTribunes = selected,
                                 blockedIdentities = blocked,
@@ -319,15 +499,149 @@ fun SettingsScreen(
                                 plopList = plopList,
                             ),
                         )
-                        if (!ok) error = "Invalid server URL"
+                        if (!ok) error = saveErrorMessage
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Save settings")
+                    Text(stringResource(R.string.settings_save))
                 }
             }
         }
     }
+
+    if (showBoardDialog) {
+        AddBoardDialog(
+            onDismiss = { showBoardDialog = false },
+            onAdd = { board ->
+                val added = onAddBoard(board)
+                if (added) showBoardDialog = false
+                added
+            },
+        )
+    }
+}
+
+@Composable
+private fun AddBoardDialog(
+    onDismiss: () -> Unit,
+    onAdd: (Board) -> Boolean,
+) {
+    var name by remember { mutableStateOf("") }
+    var backendUrl by remember { mutableStateOf("") }
+    var postUrl by remember { mutableStateOf("") }
+    var postField by remember { mutableStateOf(Board.DEFAULT_POST_FIELD) }
+    var infoField by remember { mutableStateOf("") }
+    var oauth by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val validationMessages = mapOf(
+        BoardValidationError.NameRequired to stringResource(R.string.board_error_name_required),
+        BoardValidationError.NameTooLong to stringResource(R.string.board_error_name_too_long),
+        BoardValidationError.NameInvalid to stringResource(R.string.board_error_name_invalid),
+        BoardValidationError.BackendUrl to stringResource(R.string.board_error_backend_url),
+        BoardValidationError.PostUrl to stringResource(R.string.board_error_post_url),
+        BoardValidationError.PostField to stringResource(R.string.board_error_post_field),
+        BoardValidationError.InfoField to stringResource(R.string.board_error_info_field),
+    )
+    val duplicateMessage = stringResource(R.string.board_duplicate)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.board_dialog_title)) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(stringResource(R.string.board_name)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = backendUrl,
+                    onValueChange = { backendUrl = it },
+                    label = { Text(stringResource(R.string.board_backend_url)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = postUrl,
+                    onValueChange = { postUrl = it },
+                    label = { Text(stringResource(R.string.board_post_url)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = postField,
+                    onValueChange = { postField = it },
+                    label = { Text(stringResource(R.string.board_post_field)) },
+                    placeholder = { Text(Board.DEFAULT_POST_FIELD) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = infoField,
+                    onValueChange = { infoField = it },
+                    label = { Text(stringResource(R.string.board_info_field)) },
+                    singleLine = true,
+                    supportingText = {
+                        Text(stringResource(R.string.board_info_support))
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = oauth,
+                        onCheckedChange = { oauth = it },
+                    )
+                    Text(
+                        text = stringResource(R.string.board_oauth),
+                        modifier = Modifier.padding(start = 4.dp),
+                    )
+                }
+                error?.let {
+                    Text(
+                        text = it,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val board = Board(
+                        name = name,
+                        backendUrl = backendUrl,
+                        postUrl = postUrl,
+                        postField = postField.ifBlank { Board.DEFAULT_POST_FIELD },
+                        infoField = infoField,
+                        auth = if (oauth) BoardAuth.OAuth2 else BoardAuth.None,
+                    )
+                    val validation = board.validationError()
+                    if (validation != null) {
+                        error = validationMessages.getValue(validation)
+                    } else if (onAdd(board)) {
+                        error = null
+                    } else {
+                        error = duplicateMessage
+                    }
+                },
+            ) {
+                Text(stringResource(R.string.action_add))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        },
+    )
 }
 
 private fun String.toBlockedDisplayMode(): BlockedDisplayMode =

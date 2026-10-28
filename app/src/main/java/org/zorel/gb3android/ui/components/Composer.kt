@@ -38,6 +38,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -45,6 +46,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import org.zorel.gb3android.R
 import org.zorel.gb3android.data.Post
 import org.zorel.gb3android.data.TextDraft
 import org.zorel.gb3android.ui.DisplayPost
@@ -140,10 +142,13 @@ fun Composer(
                             modifier = Modifier.weight(1f),
                         )
                         TextButton(onClick = { onReplySelected(selectedPost.post) }) {
-                            Text("Insert")
+                            Text(stringResource(R.string.composer_insert))
                         }
                         IconButton(onClick = onClearSelection) {
-                            Icon(Icons.Default.Close, contentDescription = "Clear selection")
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = stringResource(R.string.composer_clear_selection),
+                            )
                         }
                     }
                 }
@@ -156,7 +161,7 @@ fun Composer(
                     onClick = onTools,
                     modifier = Modifier.size(42.dp),
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = "Post tools")
+                    Icon(Icons.Default.Add, contentDescription = stringResource(R.string.composer_tools))
                 }
                 BasicTextField(
                     value = fieldValue,
@@ -199,7 +204,10 @@ fun Composer(
                             ) {
                                 if (fieldValue.text.isEmpty()) {
                                     Text(
-                                        text = "Message to ${state.activeTribune ?: "…"}",
+                                        text = stringResource(
+                                            R.string.composer_message_to,
+                                            state.activeTribune ?: "…",
+                                        ),
                                         style = MaterialTheme.typography.bodyLarge,
                                         color = palette.muted,
                                         maxLines = 1,
@@ -227,7 +235,7 @@ fun Composer(
                     } else {
                         Icon(
                             Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "Send message",
+                            contentDescription = stringResource(R.string.composer_send),
                         )
                     }
                 }

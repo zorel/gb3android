@@ -46,6 +46,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -53,6 +54,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import org.zorel.gb3android.R
 import org.zorel.gb3android.data.EmojiItem
 import org.zorel.gb3android.data.Post
 import org.zorel.gb3android.data.Totoz
@@ -90,17 +92,17 @@ fun MenuSheet(
     val uriHandler = LocalUriHandler.current
     Gb3BottomSheet(onDismiss) {
         Column(modifier = Modifier.padding(bottom = 20.dp)) {
-            SheetHeader("gb3")
-            MenuItem("😱", "Totoz search", onTotoz)
-            MenuItem("💩", "Emoji search", onEmoji)
-            MenuItem("📎", "Attach a file", onAttach)
-            MenuItem("⎇", "Formatting shortcuts", onAlt)
+            SheetHeader(stringResource(R.string.app_name))
+            MenuItem("😱", stringResource(R.string.menu_totoz_search), onTotoz)
+            MenuItem("💩", stringResource(R.string.menu_emoji_search), onEmoji)
+            MenuItem("📎", stringResource(R.string.menu_attach), onAttach)
+            MenuItem("⎇", stringResource(R.string.menu_formatting), onAlt)
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-            MenuItem("⚙", "Settings", onSettings)
-            MenuItem("✅", "Mark all tribunes as read", onMarkAllRead)
-            MenuItem("🔄", "Reconnect live stream", onReconnect)
+            MenuItem("⚙", stringResource(R.string.menu_settings), onSettings)
+            MenuItem("✅", stringResource(R.string.menu_mark_all_read), onMarkAllRead)
+            MenuItem("🔄", stringResource(R.string.menu_reconnect), onReconnect)
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-            MenuItem("ℹ", "About gb3") {
+            MenuItem("ℹ", stringResource(R.string.menu_about)) {
                 runCatching { uriHandler.openUri("https://codeberg.org/devnewton/gb3") }
             }
         }
@@ -128,19 +130,19 @@ private fun MenuItem(icon: String, label: String, onClick: () -> Unit) {
 }
 
 private val ALT_BUTTONS = listOf(
-    "BLAM" to "blam",
-    "Moment" to "moment",
-    "φ" to "phi",
-    "Bold" to "bold",
-    "Italic" to "italic",
-    "Underline" to "underline",
-    "Strike" to "strikeThrough",
-    "Teletext" to "teletext",
-    "Code" to "code",
-    "Spoiler" to "spoiler",
-    "Paf" to "paf",
-    "♪" to "acappella",
-    "Last posted" to "lastPosted",
+    R.string.alt_blam to "blam",
+    R.string.alt_moment to "moment",
+    R.string.alt_phi to "phi",
+    R.string.alt_bold to "bold",
+    R.string.alt_italic to "italic",
+    R.string.alt_underline to "underline",
+    R.string.alt_strike to "strikeThrough",
+    R.string.alt_teletext to "teletext",
+    R.string.alt_code to "code",
+    R.string.alt_spoiler to "spoiler",
+    R.string.alt_paf to "paf",
+    R.string.alt_acappella to "acappella",
+    R.string.alt_last_posted to "lastPosted",
 )
 
 @Composable
@@ -155,9 +157,9 @@ fun AltSheet(
                 .padding(horizontal = 16.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            SheetHeader("Formatting shortcuts")
+            SheetHeader(stringResource(R.string.menu_formatting))
             Text(
-                text = "The current selection is wrapped when a shortcut supports it.",
+                text = stringResource(R.string.alt_shortcuts_hint),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -166,7 +168,7 @@ fun AltSheet(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    row.forEach { (label, name) ->
+                    row.forEach { (labelRes, name) ->
                         OutlinedButton(
                             onClick = {
                                 onAlt(name)
@@ -174,7 +176,11 @@ fun AltSheet(
                             },
                             modifier = Modifier.weight(1f),
                         ) {
-                            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                stringResource(labelRes),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
                     }
                     repeat(3 - row.size) {
@@ -199,6 +205,7 @@ fun TotozSheet(
     var error by remember { mutableStateOf<String?>(null) }
     var searched by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val searchFailed = stringResource(R.string.totoz_search_failed)
 
     fun search() {
         if (loading) return
@@ -210,7 +217,7 @@ fun TotozSheet(
                     results = it
                     searched = true
                 }
-                .onFailure { error = it.message ?: "totoz search failed" }
+                .onFailure { error = it.message ?: searchFailed }
             loading = false
         }
     }
@@ -227,13 +234,16 @@ fun TotozSheet(
                     value = query,
                     onValueChange = { query = it },
                     modifier = Modifier.weight(1f),
-                    placeholder = { Text("dont be so vanilla") },
+                    placeholder = { Text(stringResource(R.string.totoz_placeholder)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { search() }),
                 )
                 IconButton(onClick = { search() }, enabled = !loading) {
-                    Icon(Icons.Default.Search, contentDescription = "Search totoz")
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = stringResource(R.string.totoz_search),
+                    )
                 }
             }
             if (loading) {
@@ -252,7 +262,7 @@ fun TotozSheet(
             }
             if (!loading && searched && results.isEmpty() && error == null) {
                 Text(
-                    text = "No totoz found.",
+                    text = stringResource(R.string.totoz_none),
                     modifier = Modifier.padding(vertical = 16.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -315,6 +325,7 @@ fun EmojiSheet(
     var error by remember { mutableStateOf<String?>(null) }
     var searched by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val searchFailed = stringResource(R.string.emoji_search_failed)
 
     fun search() {
         if (loading) return
@@ -326,7 +337,7 @@ fun EmojiSheet(
                     results = it
                     searched = true
                 }
-                .onFailure { error = it.message ?: "emoji search failed" }
+                .onFailure { error = it.message ?: searchFailed }
             loading = false
         }
     }
@@ -343,13 +354,16 @@ fun EmojiSheet(
                     value = query,
                     onValueChange = { query = it },
                     modifier = Modifier.weight(1f),
-                    placeholder = { Text("poop") },
+                    placeholder = { Text(stringResource(R.string.emoji_placeholder)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { search() }),
                 )
                 IconButton(onClick = { search() }, enabled = !loading) {
-                    Icon(Icons.Default.Search, contentDescription = "Search emoji")
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = stringResource(R.string.emoji_search),
+                    )
                 }
             }
             if (loading) {
@@ -368,7 +382,7 @@ fun EmojiSheet(
             }
             if (!loading && searched && results.isEmpty() && error == null) {
                 Text(
-                    text = "No emoji found.",
+                    text = stringResource(R.string.emoji_none),
                     modifier = Modifier.padding(vertical = 16.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -428,26 +442,26 @@ fun PostActionsSheet(
                 .padding(horizontal = 16.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            SheetHeader("Post ${post.clock}")
+            SheetHeader(stringResource(R.string.post_actions_title, post.clock))
             Text(
-                text = "${post.fullDate} · ${post.tribune}",
+                text = stringResource(R.string.post_actions_meta, post.fullDate, post.tribune),
                 style = MaterialTheme.typography.bodySmall,
                 color = palette.muted,
             )
             Text(
-                text = "Author: ${post.displayIdentity}",
+                text = stringResource(R.string.post_author, post.displayIdentity),
                 style = MaterialTheme.typography.bodyMedium,
             )
             if (post.login.isNotBlank()) {
                 Text(
-                    text = "Login: ${post.login}",
+                    text = stringResource(R.string.post_login, post.login),
                     style = MaterialTheme.typography.bodySmall,
                     color = palette.muted,
                 )
             }
             if (post.info.isNotBlank()) {
                 Text(
-                    text = "Info: ${post.info}",
+                    text = stringResource(R.string.post_info, post.info),
                     style = MaterialTheme.typography.bodySmall,
                     color = palette.muted,
                     maxLines = 3,
@@ -461,7 +475,7 @@ fun PostActionsSheet(
                         onDismiss()
                     },
                 ) {
-                    Text("Reply")
+                    Text(stringResource(R.string.action_reply))
                 }
                 OutlinedButton(
                     onClick = {
@@ -469,7 +483,7 @@ fun PostActionsSheet(
                         onDismiss()
                     },
                 ) {
-                    Text("Copy message")
+                    Text(stringResource(R.string.action_copy_message))
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -479,7 +493,7 @@ fun PostActionsSheet(
                         onDismiss()
                     },
                 ) {
-                    Text("Call author")
+                    Text(stringResource(R.string.action_call_author))
                 }
                 TextButton(
                     onClick = {
@@ -487,7 +501,7 @@ fun PostActionsSheet(
                         onDismiss()
                     },
                 ) {
-                    Text("Select")
+                    Text(stringResource(R.string.action_select))
                 }
             }
             Spacer(Modifier.padding(bottom = 20.dp))

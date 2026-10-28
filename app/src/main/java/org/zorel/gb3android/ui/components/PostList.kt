@@ -35,8 +35,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import org.zorel.gb3android.R
 import org.zorel.gb3android.data.Post
 import org.zorel.gb3android.domain.MessageToken
 import org.zorel.gb3android.ui.DisplayPost
@@ -125,7 +127,11 @@ fun PostList(
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(30.dp))
                     Text(
-                        text = "Connecting to ${state.serverUrl}…",
+                        text = if (state.directBoards) {
+                            stringResource(R.string.posts_refreshing_boards)
+                        } else {
+                            stringResource(R.string.posts_connecting_to, state.serverUrl)
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = palette.muted,
                         textAlign = TextAlign.Center,
@@ -143,18 +149,22 @@ fun PostList(
                 ) {
                     Text(
                         text = if (state.activeTribune == null) {
-                            "No tribune selected"
+                            stringResource(R.string.posts_none_selected)
                         } else {
-                            "No post in ${state.activeTribune}"
+                            stringResource(R.string.posts_no_post_in, state.activeTribune)
                         },
                         style = MaterialTheme.typography.titleMedium,
                         textAlign = TextAlign.Center,
                     )
                     Text(
                         text = if (state.tribunes.isEmpty()) {
-                            "Open the menu to retry or check the server URL in Settings."
+                            if (state.directBoards) {
+                                stringResource(R.string.posts_empty_direct_hint)
+                            } else {
+                                stringResource(R.string.posts_empty_server_hint)
+                            }
                         } else {
-                            "Swipe left or right to change tribune."
+                            stringResource(R.string.posts_swipe_hint)
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = palette.muted,
@@ -162,7 +172,7 @@ fun PostList(
                     )
                     if (state.tribunes.isEmpty()) {
                         Button(onClick = onRetry) {
-                            Text("Retry")
+                            Text(stringResource(R.string.action_retry))
                         }
                     }
                 }
@@ -201,7 +211,10 @@ fun PostList(
                             scope.launch { listState.animateScrollToItem(posts.lastIndex) }
                         },
                     ) {
-                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Jump to latest posts")
+                        Icon(
+                            Icons.Default.KeyboardArrowDown,
+                            contentDescription = stringResource(R.string.action_jump_latest),
+                        )
                     }
                 }
             }
