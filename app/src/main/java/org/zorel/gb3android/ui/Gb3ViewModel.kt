@@ -5,12 +5,17 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import org.zorel.gb3android.data.BlockedDisplayMode
+import org.zorel.gb3android.data.Board
+import org.zorel.gb3android.data.BoardClient
+import org.zorel.gb3android.data.BoardCodec
+import org.zorel.gb3android.data.ConnectionMode
 import org.zorel.gb3android.data.EmojiItem
 import org.zorel.gb3android.data.Gb3Api
 import org.zorel.gb3android.data.LinuxfrSession
 import org.zorel.gb3android.data.PollEvent
 import org.zorel.gb3android.data.Post
 import org.zorel.gb3android.data.Preferences
+import org.zorel.gb3android.data.PredefinedBoards
 import org.zorel.gb3android.data.Screen
 import org.zorel.gb3android.data.TextDraft
 import org.zorel.gb3android.data.Totoz
@@ -24,15 +29,18 @@ import org.zorel.gb3android.domain.ParsedMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.IOException
 
 private const val MAX_MESSAGE_LENGTH = 65_536
+private const val BOARD_POLL_INTERVAL_MS = 30_000L
 private val PLOP_WORDS = listOf("pika", "plop", "prout", "grouik", "meuh")
 
 private val ALT_TEMPLATES = mapOf(
@@ -53,6 +61,7 @@ private val ALT_TEMPLATES = mapOf(
 class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = Preferences(application)
     private val api = Gb3Api()
+    private val boardClient = BoardClient()
 
     private val _state = MutableStateFlow(UiState())
     val state = _state.asStateFlow()
@@ -69,8 +78,12 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
     private var foreground = false
     private var bootstrapJob: Job? = null
     private var pollJob: Job? = null
+    private var boardPollJob: Job? = null
     private var recomputeJob: Job? = null
     private var pollSignature: String? = null
+    private var boardPollSignature: String? = null
+    private val boardStatus = HashMap<String, Boolean>()
+    private val reportedBoardFailures = HashSet<String>()
 
     /** Message recovered after an interrupted LinuxFR OAuth flow. */
     private var pendingDraftOnStart: String? = prefs.pendingLinuxfrMessage
@@ -85,25 +98,57 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
             prefs.pendingLinuxfrMessage = null
             prefs.draft = draftText
         }
+        val mode = prefs.connectionMode
+        val boards = PredefinedBoards.merge(BoardCodec.decode(prefs.customBoardsJson))
+        val boardNames = boards.mapTo(HashSet()) { it.name }
+        val stored = prefs.selectedTribunesCsv.csvSet()
+        val directSelected = if (mode == ConnectionMode.DirectBoards) {
+            stored.filter { it in boardNames }.sorted()
+        } else {
+            emptyList()
+        }
+        val setupRequired = when (mode) {
+            ConnectionMode.Server -> prefs.serverUrl.isBlank()
+            ConnectionMode.DirectBoards -> directSelected.isEmpty()
+        }
         _state.value = UiState(
             serverUrl = prefs.serverUrl,
+            connectionMode = mode,
+            boards = boards,
             nickname = nickname,
+            availableTribunes = if (mode == ConnectionMode.DirectBoards) {
+                boardNames.sorted()
+            } else {
+                emptyList()
+            },
+            tribunes = directSelected,
+            activeTribune = directSelected.firstOrNull(),
             localBlocked = prefs.localBlockedIdentitiesCsv.csvSet(),
             displayMode = prefs.blockedDisplayMode,
             plopList = prefs.plopListCsv.csvSet(),
             draft = TextDraft(draftText, draftText.length, draftText.length),
             linuxfr = prefs.linuxfrSession,
             lastPosted = prefs.lastPostedMessage.ifBlank { null },
-            setupRequired = prefs.serverUrl.isBlank(),
-            initializing = prefs.serverUrl.isNotBlank(),
+            setupRequired = setupRequired,
+            initializing = !setupRequired,
         )
-        if (prefs.serverUrl.isNotBlank()) bootstrap()
+        if (!setupRequired) bootstrap()
     }
 
     fun onForeground() {
         foreground = true
         val current = _state.value
-        if (current.setupRequired || current.serverUrl.isBlank()) return
+        if (current.setupRequired) return
+        if (current.directBoards) {
+            if (bootstrapJob?.isActive == true || boardPollJob?.isActive == true) return
+            if (current.tribunes.isEmpty()) {
+                bootstrap()
+            } else {
+                startBoardPolling(current.tribunes)
+            }
+            return
+        }
+        if (current.serverUrl.isBlank()) return
         if (bootstrapJob?.isActive == true || pollJob?.isActive == true) return
         if (current.tribunes.isEmpty()) {
             bootstrap()
@@ -115,10 +160,24 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
     fun onBackground() {
         foreground = false
         stopPolling()
+        stopBoardPolling()
     }
 
     fun reconnect() {
         val current = _state.value
+        if (current.directBoards) {
+            if (current.tribunes.isEmpty()) {
+                emit("no board selected", isError = true)
+                return
+            }
+            if (!foreground) {
+                emit("reconnect the app to resume the board refresh", isError = true)
+                return
+            }
+            emit("refreshing boards…")
+            startBoardPolling(current.tribunes, force = true)
+            return
+        }
         if (current.serverUrl.isBlank()) return
         if (!foreground) {
             emit("reconnect the app to resume the live stream", isError = true)
@@ -136,12 +195,79 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
     private fun bootstrap(clearPosts: Boolean = false) {
         bootstrapJob?.cancel()
         stopPolling()
+        stopBoardPolling()
         if (clearPosts) {
             allPosts.clear()
             parsedCache.clear()
             plopOverrides.clear()
             selectedKey = null
         }
+        when (_state.value.connectionMode) {
+            ConnectionMode.DirectBoards -> bootstrapDirect()
+            ConnectionMode.Server -> bootstrapServer(clearPosts)
+        }
+    }
+
+    /**
+     * Direct-board mode has no server to discover tribunes from: the available
+     * list comes from the built-in definitions and the user's custom boards.
+     */
+    private fun bootstrapDirect() {
+        val available = _state.value.boards.map { it.name }.sorted()
+        val stored = prefs.selectedTribunesCsv.csvSet()
+        val selected = available.filter { it in stored }
+        if (selected.isEmpty()) {
+            _state.update {
+                it.copy(
+                    initializing = false,
+                    connecting = false,
+                    connected = false,
+                    availableTribunes = available,
+                    tribunes = emptyList(),
+                    activeTribune = null,
+                    serverBlocked = emptySet(),
+                    displayPosts = emptyList(),
+                    badges = emptyMap(),
+                    selectedKey = null,
+                    setupRequired = true,
+                )
+            }
+            recomputeNow()
+            emit("select at least one board", isError = true)
+            return
+        }
+
+        prefs.selectedTribunesCsv = selected.joinToString(",")
+        val currentActive = _state.value.activeTribune
+        val active = when {
+            pendingDraftOnStart != null && "dlfp" in selected -> "dlfp"
+            else -> currentActive?.takeIf { it in selected } ?: selected.first()
+        }
+        pendingDraftOnStart = null
+        selectedKey = null
+        serverBlocked = emptySet()
+        _state.update {
+            it.copy(
+                initializing = false,
+                connecting = foreground,
+                connected = false,
+                availableTribunes = available,
+                tribunes = selected,
+                activeTribune = active,
+                serverBlocked = emptySet(),
+                selectedKey = null,
+                setupRequired = false,
+            )
+        }
+        recomputeNow()
+        if (foreground) {
+            startBoardPolling(selected)
+        } else {
+            _state.update { it.copy(connecting = false) }
+        }
+    }
+
+    private fun bootstrapServer(clearPosts: Boolean) {
         val normalized = Gb3Api.normalizeServerUrl(_state.value.serverUrl)
         if (normalized == null) {
             _state.update {
@@ -294,6 +420,79 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(connected = false, connecting = false) }
     }
 
+    /**
+     * Poll every selected board directly, at gb2c's usual 30 second interval.
+     * Each board has its own loop so a slow or broken board cannot delay the
+     * others.
+     */
+    private fun startBoardPolling(tribunes: List<String>, force: Boolean = false) {
+        val boards = _state.value.boards
+            .filter { it.name in tribunes }
+            .sortedBy { it.name }
+        val signature = boards.joinToString(",") { "${it.name}|${it.backendUrl}" }
+        if (!force && signature == boardPollSignature && boardPollJob?.isActive == true) return
+        boardPollJob?.cancel()
+        boardPollSignature = signature
+        boardStatus.clear()
+        reportedBoardFailures.clear()
+        if (boards.isEmpty()) {
+            _state.update { it.copy(connecting = false, connected = false) }
+            return
+        }
+        boards.forEach { boardStatus[it.name] = false }
+        _state.update { it.copy(connecting = true, connected = false) }
+        boardPollJob = viewModelScope.launch {
+            coroutineScope {
+                for (board in boards) {
+                    launch {
+                        while (isActive) {
+                            val started = System.currentTimeMillis()
+                            refreshBoard(board)
+                            val elapsed = System.currentTimeMillis() - started
+                            delay((BOARD_POLL_INTERVAL_MS - elapsed).coerceAtLeast(1_000L))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** Fetch one board once and update the connection indicator. */
+    private suspend fun refreshBoard(board: Board) {
+        try {
+            val posts = boardClient.fetch(board)
+            posts.forEach(::ingest)
+            boardStatus[board.name] = true
+            reportedBoardFailures.remove(board.name)
+            updateBoardConnection()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            boardStatus[board.name] = false
+            updateBoardConnection()
+            if (reportedBoardFailures.add(board.name)) {
+                emit(
+                    "cannot read ${board.name}: ${error.message ?: "network error"}",
+                    isError = true,
+                )
+            }
+        }
+    }
+
+    private fun updateBoardConnection() {
+        val anyConnected = boardStatus.values.any { it }
+        _state.update { it.copy(connected = anyConnected, connecting = false) }
+    }
+
+    private fun stopBoardPolling() {
+        boardPollJob?.cancel()
+        boardPollJob = null
+        boardPollSignature = null
+        boardStatus.clear()
+        reportedBoardFailures.clear()
+        _state.update { it.copy(connected = false, connecting = false) }
+    }
+
     private fun ingest(post: Post) {
         if (post.tribune !in _state.value.tribunes) return
         val existing = allPosts[post.key]
@@ -367,7 +566,6 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
                         post = post,
                         parsed = displayParsed,
                         hidden = conversation.hidden,
-                        marker = conversation.marker,
                         conversationColor = conversation.rootKey?.let(Conversation::colorIndex),
                         isMine = conversation.isMine,
                         isBigorno = conversation.isBigorno,
@@ -589,11 +787,29 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         val tribune = current.activeTribune ?: return
         val message = current.draft.text.trim()
         if (message.isEmpty()) return
-        if (tribune == "dlfp") {
+        val board = if (current.directBoards) {
+            current.boards.firstOrNull { it.name == tribune }
+        } else {
+            null
+        }
+        if (current.directBoards && board == null) {
+            emit("unknown board $tribune", isError = true)
+            return
+        }
+        val needsLinuxfr = board?.requiresOAuth == true || (!current.directBoards && tribune == "dlfp")
+        if (needsLinuxfr) {
             viewModelScope.launch {
                 _state.update { it.copy(sending = true) }
                 val token = ensureLinuxfrToken()
                 if (token == null) {
+                    if (current.directBoards && current.serverUrl.isBlank()) {
+                        _state.update { it.copy(sending = false) }
+                        emit(
+                            "LinuxFR needs a gb3 server URL to authorize; set one in Settings",
+                            isError = true,
+                        )
+                        return@launch
+                    }
                     prefs.pendingLinuxfrMessage = message
                     clearDraft()
                     _state.update { it.copy(sending = false, screen = Screen.LinuxfrOauth) }
@@ -609,14 +825,26 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun postMessage(tribune: String, message: String, accessToken: String?) {
         val info = _state.value.nickname
+        val board = if (_state.value.directBoards) {
+            _state.value.boards.firstOrNull { it.name == tribune }
+        } else {
+            null
+        }
         _state.update { it.copy(sending = true) }
         clearDraft()
         viewModelScope.launch {
             try {
-                api.post(_state.value.serverUrl, tribune, info, message, accessToken)
+                if (board != null) {
+                    boardClient.post(board, info, message, accessToken)
+                } else {
+                    api.post(_state.value.serverUrl, tribune, info, message, accessToken)
+                }
                 prefs.lastPostedMessage = message
                 _state.update { it.copy(sending = false, lastPosted = message) }
                 emit("posted to $tribune")
+                // gb2c polls immediately after a post; do the same so the new
+                // message shows up without waiting for the next 30 second tick.
+                if (board != null) refreshBoard(board)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -652,6 +880,12 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         ) {
             return session.accessToken
         }
+        if (current.serverUrl.isBlank()) {
+            prefs.linuxfrSession = null
+            _state.update { it.copy(linuxfr = null) }
+            emit("linuxfr session expired and no gb3 server is configured", isError = true)
+            return null
+        }
         if (session.refreshToken.isBlank()) {
             prefs.linuxfrSession = null
             _state.update { it.copy(linuxfr = null) }
@@ -674,37 +908,61 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun saveSettings(input: SettingsInput): Boolean {
-        val normalized = Gb3Api.normalizeServerUrl(input.serverUrl)
-        if (normalized == null) {
+        val current = _state.value
+        val mode = input.connectionMode
+        val modeChanged = mode != current.connectionMode
+        val normalized = when {
+            input.serverUrl.isBlank() -> null
+            else -> Gb3Api.normalizeServerUrl(input.serverUrl)
+        }
+        if (mode == ConnectionMode.Server && normalized == null) {
             emit("invalid server URL", isError = true)
             return false
         }
-        val current = _state.value
-        val serverChanged = normalized != current.serverUrl
+        if (input.serverUrl.isNotBlank() && normalized == null) {
+            emit("invalid server URL", isError = true)
+            return false
+        }
+        val effectiveServer = normalized.orEmpty()
+        val serverChanged = effectiveServer != current.serverUrl
         val nickname = input.nickname.trim().ifBlank {
             current.nickname.ifBlank { randomNickname() }
         }
         val blocked = input.blockedIdentities.csvSet()
         val plopList = input.plopList.csvSet()
-        val available = current.availableTribunes
-        val requested = input.selectedTribunes.filter { available.isEmpty() || it in available }
-        val effectiveSelected = when {
-            available.isEmpty() -> requested.toList()
-            requested.isEmpty() -> available
-            else -> requested
+        val available = when (mode) {
+            ConnectionMode.DirectBoards -> current.boards.map { it.name }.sorted()
+            ConnectionMode.Server -> current.availableTribunes
+        }
+        val requested = input.selectedTribunes.filter { it in available }
+        val effectiveSelected = when (mode) {
+            ConnectionMode.DirectBoards -> when {
+                requested.isNotEmpty() -> requested.sorted()
+                available.isNotEmpty() -> available
+                else -> emptyList()
+            }
+
+            ConnectionMode.Server -> when {
+                available.isEmpty() -> requested.toList()
+                requested.isEmpty() -> available
+                else -> requested.toList()
+            }
         }
 
-        prefs.serverUrl = normalized
+        val resetSelection = mode == ConnectionMode.Server && (serverChanged || modeChanged)
+        prefs.serverUrl = effectiveServer
+        prefs.connectionMode = mode
         prefs.nickname = nickname
         prefs.localBlockedIdentitiesCsv = blocked.joinToString(",")
         prefs.blockedDisplayMode = input.displayMode
         prefs.plopListCsv = plopList.joinToString(",")
-        prefs.selectedTribunesCsv = if (serverChanged) "" else effectiveSelected.joinToString(",")
+        prefs.selectedTribunesCsv = if (resetSelection) "" else effectiveSelected.joinToString(",")
         emit("settings saved")
 
         _state.update {
             it.copy(
-                serverUrl = normalized,
+                serverUrl = effectiveServer,
+                connectionMode = mode,
                 nickname = nickname,
                 localBlocked = blocked,
                 displayMode = input.displayMode,
@@ -714,7 +972,7 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
 
-        if (serverChanged) {
+        if (modeChanged || (mode == ConnectionMode.Server && serverChanged)) {
             allPosts.clear()
             parsedCache.clear()
             plopOverrides.clear()
@@ -723,7 +981,11 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
             _state.update {
                 it.copy(
                     serverBlocked = emptySet(),
-                    availableTribunes = emptyList(),
+                    availableTribunes = if (mode == ConnectionMode.DirectBoards) {
+                        it.boards.map { board -> board.name }.sorted()
+                    } else {
+                        emptyList()
+                    },
                     tribunes = emptyList(),
                     activeTribune = null,
                     displayPosts = emptyList(),
@@ -758,14 +1020,21 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
             if (foreground) {
                 if (effectiveSelected.isEmpty()) {
                     stopPolling()
+                    stopBoardPolling()
+                } else if (mode == ConnectionMode.DirectBoards) {
+                    stopPolling()
+                    startBoardPolling(effectiveSelected, force = true)
                 } else {
-                    startPolling(normalized, effectiveSelected, force = true)
+                    stopBoardPolling()
+                    startPolling(effectiveServer, effectiveSelected, force = true)
                 }
             } else {
                 stopPolling()
+                stopBoardPolling()
             }
         } else if (effectiveSelected.isEmpty()) {
             stopPolling()
+            stopBoardPolling()
         }
 
         for (post in allPosts.values) {
@@ -786,7 +1055,100 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(screen = Screen.Main) }
     }
 
+    /**
+     * Add a user-defined board. Validation lives in [Board] so the same rules
+     * apply to boards loaded from preferences.
+     */
+    fun addCustomBoard(input: Board): Boolean {
+        val error = input.validationError()
+        if (error != null) {
+            emit("invalid board: $error", isError = true)
+            return false
+        }
+        val current = _state.value
+        val board = input.normalized()
+        if (current.boards.any { it.name == board.name }) {
+            emit("a board named ${board.name} already exists", isError = true)
+            return false
+        }
+        val custom = current.boards.filter { !it.predefined } + board
+        prefs.customBoardsJson = BoardCodec.encode(custom)
+        val boards = PredefinedBoards.merge(custom)
+        val names = boards.map { it.name }.sorted()
+        val selected = if (current.directBoards) {
+            (current.tribunes + board.name).distinct().sorted()
+        } else {
+            current.tribunes
+        }
+        if (current.directBoards) {
+            prefs.selectedTribunesCsv = selected.joinToString(",")
+        }
+        _state.update {
+            it.copy(
+                boards = boards,
+                availableTribunes = if (current.directBoards) names else it.availableTribunes,
+                tribunes = selected,
+                activeTribune = it.activeTribune ?: selected.firstOrNull(),
+            )
+        }
+        if (current.directBoards) {
+            recomputeNow()
+            if (foreground) startBoardPolling(selected, force = true)
+        }
+        emit("board ${board.name} added")
+        return true
+    }
+
+    fun removeCustomBoard(name: String): Boolean {
+        val current = _state.value
+        val board = current.boards.firstOrNull { it.name == name }
+        if (board == null) return false
+        if (board.predefined) {
+            emit("built-in boards cannot be removed", isError = true)
+            return false
+        }
+        val custom = current.boards.filter { !it.predefined && it.name != name }
+        prefs.customBoardsJson = BoardCodec.encode(custom)
+        val boards = PredefinedBoards.merge(custom)
+        val names = boards.map { it.name }.sorted()
+        val selected = current.tribunes.filter { it != name }
+        allPosts.keys.toList()
+            .filter { key -> allPosts[key]?.tribune == name }
+            .forEach(allPosts::remove)
+        val active = current.activeTribune
+            ?.takeIf { it != name && it in selected }
+            ?: selected.firstOrNull()
+        if (current.directBoards) {
+            prefs.selectedTribunesCsv = selected.joinToString(",")
+        }
+        _state.update {
+            it.copy(
+                boards = boards,
+                availableTribunes = if (current.directBoards) names else it.availableTribunes,
+                tribunes = selected,
+                activeTribune = active,
+            )
+        }
+        if (current.directBoards) {
+            recomputeNow()
+            if (foreground) {
+                if (selected.isEmpty()) {
+                    stopBoardPolling()
+                } else {
+                    startBoardPolling(selected, force = true)
+                }
+            }
+        }
+        emit("board $name removed")
+        return true
+    }
+
     fun openLinuxfrOauth() {
+        val current = _state.value
+        if (current.serverUrl.isBlank()) {
+            emit("set a gb3 server URL to connect LinuxFR", isError = true)
+            return
+        }
         _state.update { it.copy(screen = Screen.LinuxfrOauth) }
     }
 
@@ -825,7 +1187,10 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
     fun attach(uri: Uri) {
         val current = _state.value
         if (current.uploading) return
-        if (current.serverUrl.isBlank()) return
+        if (current.serverUrl.isBlank()) {
+            emit("attachments need a gb3 server URL", isError = true)
+            return
+        }
         _state.update { it.copy(uploading = true) }
         viewModelScope.launch {
             try {
@@ -848,7 +1213,9 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
 
     suspend fun searchTotoz(terms: String): Result<List<Totoz>> {
         val baseUrl = _state.value.serverUrl
-        if (baseUrl.isBlank()) return Result.failure(IOException("server not configured"))
+        if (baseUrl.isBlank()) {
+            return Result.failure(IOException("totoz search needs a gb3 server URL"))
+        }
         return try {
             Result.success(api.searchTotoz(baseUrl, terms))
         } catch (cancelled: CancellationException) {
@@ -860,7 +1227,9 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
 
     suspend fun searchEmoji(terms: String): Result<List<EmojiItem>> {
         val baseUrl = _state.value.serverUrl
-        if (baseUrl.isBlank()) return Result.failure(IOException("server not configured"))
+        if (baseUrl.isBlank()) {
+            return Result.failure(IOException("emoji search needs a gb3 server URL"))
+        }
         return try {
             Result.success(api.searchEmoji(baseUrl, terms))
         } catch (cancelled: CancellationException) {

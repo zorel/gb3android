@@ -167,6 +167,8 @@ fun Gb3App(viewModel: Gb3ViewModel) {
                             onMarkAllRead = viewModel::markAllRead,
                             onReconnect = viewModel::reconnect,
                             onRefresh = viewModel::refreshServerInfo,
+                            onAddBoard = viewModel::addCustomBoard,
+                            onRemoveBoard = viewModel::removeCustomBoard,
                         )
                     }
 

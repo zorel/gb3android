@@ -1,6 +1,8 @@
 package org.zorel.gb3android.ui
 
 import org.zorel.gb3android.data.BlockedDisplayMode
+import org.zorel.gb3android.data.Board
+import org.zorel.gb3android.data.ConnectionMode
 import org.zorel.gb3android.data.LinuxfrSession
 import org.zorel.gb3android.data.Post
 import org.zorel.gb3android.data.Screen
@@ -12,7 +14,6 @@ data class DisplayPost(
     val post: Post,
     val parsed: ParsedMessage,
     val hidden: Boolean,
-    val marker: String?,
     val conversationColor: Int?,
     val isMine: Boolean,
     val isBigorno: Boolean,
@@ -23,6 +24,8 @@ data class DisplayPost(
 
 data class UiState(
     val serverUrl: String = "",
+    val connectionMode: ConnectionMode = ConnectionMode.Server,
+    val boards: List<Board> = emptyList(),
     val nickname: String = "",
     val availableTribunes: List<String> = emptyList(),
     val tribunes: List<String> = emptyList(),
@@ -48,6 +51,7 @@ data class UiState(
     val focusComposerToken: Int = 0,
 ) {
     val blockedIdentities: Set<String> get() = localBlocked + serverBlocked
+    val directBoards: Boolean get() = connectionMode == ConnectionMode.DirectBoards
     val activeIndex: Int get() = activeTribune?.let { tribunes.indexOf(it) } ?: -1
     val selectedPost: DisplayPost? get() = displayPosts.firstOrNull { it.post.key == selectedKey }
     val canSend: Boolean
@@ -56,6 +60,7 @@ data class UiState(
 
 data class SettingsInput(
     val serverUrl: String,
+    val connectionMode: ConnectionMode,
     val nickname: String,
     val selectedTribunes: Set<String>,
     val blockedIdentities: String,

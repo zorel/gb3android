@@ -125,7 +125,11 @@ fun PostList(
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(30.dp))
                     Text(
-                        text = "Connecting to ${state.serverUrl}…",
+                        text = if (state.directBoards) {
+                            "Refreshing boards…"
+                        } else {
+                            "Connecting to ${state.serverUrl}…"
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = palette.muted,
                         textAlign = TextAlign.Center,
@@ -152,7 +156,11 @@ fun PostList(
                     )
                     Text(
                         text = if (state.tribunes.isEmpty()) {
-                            "Open the menu to retry or check the server URL in Settings."
+                            if (state.directBoards) {
+                                "Open the menu to retry or add a board in Settings."
+                            } else {
+                                "Open the menu to retry or check the server URL in Settings."
+                            }
                         } else {
                             "Swipe left or right to change tribune."
                         },

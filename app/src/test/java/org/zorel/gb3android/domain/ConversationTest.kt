@@ -112,11 +112,10 @@ class ConversationTest {
             myIdentities = setOf("dave"),
         )
         assertEquals("trib:1", analysis.posts.getValue("trib:2").refs.single().targetKey)
-        assertEquals("┗", analysis.posts.getValue("trib:2").marker)
     }
 
     @Test
-    fun exposesRootAndMarkers() {
+    fun exposesRootAndColor() {
         val posts = listOf(
             post(1, "2026-10-26T10:00:00", message = "root"),
             post(2, "2026-10-26T10:00:05", message = "reply 10:00:00"),
@@ -128,10 +127,7 @@ class ConversationTest {
             blockedIdentities = emptySet(),
             myIdentities = setOf("dave"),
         )
-        val root = analysis.posts.getValue("trib:1")
         val reply = analysis.posts.getValue("trib:2")
-        assertEquals("┏", root.marker)
-        assertEquals("┗", reply.marker)
         assertEquals("trib:1", reply.rootKey)
         assertTrue(Conversation.colorIndex("trib:1") in 0 until Conversation.CONVERSATION_COLORS)
     }

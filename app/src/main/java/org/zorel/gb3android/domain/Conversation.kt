@@ -24,7 +24,6 @@ object Conversation {
         val parents: Set<String>,
         val children: Set<String>,
         val rootKey: String?,
-        val marker: String?,
         val refs: List<ResolvedRef>,
     )
 
@@ -125,12 +124,6 @@ object Conversation {
             val isReply = refs.any { ref -> ref.targetKey?.let { isMineByKey[it] } == true }
             val isBigorno = parsed.getValue(key).bigornos.any { it in myIdentitySet }
             val hasEdges = parents.isNotEmpty() || children.isNotEmpty()
-            val marker = when {
-                !hasEdges -> null
-                parents.isEmpty() -> "┏"
-                children.isEmpty() -> "┗"
-                else -> "┣"
-            }
             key to PostConversation(
                 hidden = key in hidden,
                 isMine = isMineByKey[key] == true,
@@ -139,7 +132,6 @@ object Conversation {
                 parents = parents,
                 children = children,
                 rootKey = if (hasEdges) rootOf(key) else null,
-                marker = marker,
                 refs = refs,
             )
         }
