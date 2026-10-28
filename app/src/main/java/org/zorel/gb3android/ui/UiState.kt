@@ -14,7 +14,6 @@ data class DisplayPost(
     val post: Post,
     val parsed: ParsedMessage,
     val hidden: Boolean,
-    val marker: String?,
     val conversationColor: Int?,
     val isMine: Boolean,
     val isBigorno: Boolean,

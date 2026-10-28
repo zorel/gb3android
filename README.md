@@ -25,13 +25,14 @@ The client covers the feature set of `gb3tui` and `gc2`, adapted to touch:
 - clock references (norloges): tap one to jump to the referenced post, tap a
   post clock to quote it in the composer, and see reverse references
   highlighted while a post is selected;
-- conversation grouping with a stable color rail and `┏ ┣ ┗` markers, plus the
+- conversation grouping with a stable, high-contrast color rail, plus the
   same conversation filter as `gc2`:
   - hide a login/user-agent and every direct or indirect reply,
   - either hide those posts or show them grayed with their message masked;
 - server-side blocked identities from `/gb2c/config` merged with local
   settings;
-- bigorno, "this is a reply to me" and "mine" indicators;
+- bigorno, "this is a reply to me" and "mine" indicators in a reserved leading
+  slot, so clocks and author names stay aligned;
 - message formatting: `<b>`, `<i>`, `<u>`, `<s>`, `<tt>`, `<code>`, tappable
   spoilers, links, `[:totoz]`, `nick<` bigornos and normal bouchot whitespace;
 - totoz search with image grid and preview, emoji search, attachment upload

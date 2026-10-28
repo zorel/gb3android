@@ -566,7 +566,6 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
                         post = post,
                         parsed = displayParsed,
                         hidden = conversation.hidden,
-                        marker = conversation.marker,
                         conversationColor = conversation.rootKey?.let(Conversation::colorIndex),
                         isMine = conversation.isMine,
                         isBigorno = conversation.isBigorno,
