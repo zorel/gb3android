@@ -65,6 +65,7 @@ import org.zorel.gb3android.R
 import org.zorel.gb3android.data.Post
 import org.zorel.gb3android.data.Screen
 import org.zorel.gb3android.data.TextDraft
+import org.zorel.gb3android.data.TotozServer
 import org.zorel.gb3android.ui.components.AltSheet
 import org.zorel.gb3android.ui.components.Composer
 import org.zorel.gb3android.ui.components.EmojiSheet
@@ -224,6 +225,7 @@ fun Gb3App(viewModel: Gb3ViewModel) {
                 totozPreview?.let { name ->
                     TotozImageOverlay(
                         name = name,
+                        serverUrl = state.totozServerUrl.ifBlank { TotozServer.DEFAULT_URL },
                         onDismiss = { totozPreview = null },
                     )
                 }
@@ -455,6 +457,7 @@ private fun AlarmClock() {
 @Composable
 private fun TotozImageOverlay(
     name: String,
+    serverUrl: String,
     onDismiss: () -> Unit,
 ) {
     BackHandler(onBack = onDismiss)
@@ -472,7 +475,8 @@ private fun TotozImageOverlay(
         contentAlignment = Alignment.Center,
     ) {
         AsyncImage(
-            model = "https://nsfw.totoz.eu/img/" + Uri.encode(name),
+            model = TotozServer.imageUrl(serverUrl, name)
+                ?: "${TotozServer.DEFAULT_URL}/img/${Uri.encode(name)}",
             contentDescription = stringResource(R.string.main_totoz_description, name),
             contentScale = ContentScale.Fit,
             modifier = Modifier

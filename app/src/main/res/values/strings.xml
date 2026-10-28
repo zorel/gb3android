@@ -101,8 +101,11 @@
     <string name="settings_save">Save settings</string>
     <string name="settings_refresh_boards">Refresh boards</string>
     <string name="settings_refresh_tribunes">Refresh tribunes</string>
-    <string name="settings_error_save">Invalid server URL or board selection</string>
+    <string name="settings_error_save">Invalid server URL, totoz URL or board selection</string>
     <string name="settings_identity">Identity</string>
+    <string name="settings_services">Services</string>
+    <string name="settings_totoz_server">Totoz server URL</string>
+    <string name="settings_totoz_server_support">Direct totoz search server. Leave empty to use the gb2c server when configured.</string>
     <string name="settings_nickname">Nickname</string>
     <string name="settings_nickname_support">Sent as the post info. Leave empty to generate one.</string>
     <string name="settings_linuxfr_connected">LinuxFR connected as %1$s</string>
@@ -161,6 +164,7 @@
 
     <!-- Snackbar messages -->
     <string name="error_invalid_server">Invalid server URL</string>
+    <string name="error_invalid_totoz_server">Invalid totoz server URL</string>
     <string name="error_no_board_selected">No board selected</string>
     <string name="error_select_board">Select at least one board</string>
     <string name="error_reconnect_board_background">Reconnect the app to resume the board refresh</string>

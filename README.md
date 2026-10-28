@@ -35,8 +35,9 @@ The client covers the feature set of `gb3tui` and `gc2`, adapted to touch:
   slot, so clocks and author names stay aligned;
 - message formatting: `<b>`, `<i>`, `<u>`, `<s>`, `<tt>`, `<code>`, tappable
   spoilers, links, `[:totoz]`, `nick<` bigornos and normal bouchot whitespace;
-- totoz search with image grid and preview, emoji search, attachment upload
-  (4 MiB server limit) and the ALT formatting shortcuts;
+- totoz search with image grid and preview, either through gb2c or straight from a
+  configurable totoz server (`https://nsfw.totoz.eu` by default), emoji search,
+  attachment upload (4 MiB server limit) and the ALT formatting shortcuts;
 - plop-list message replacement;
 - English and French UI, following the Android system language;
 - light/dark Material 3 theme following the system, with the gc2 palette;
@@ -156,8 +157,8 @@ The app asks how to reach tribunes:
   `/gb2c/poll` and are sent through `/gb2c/post`, as before.
 - **Direct boards** - pick one or more boards and leave the server URL empty.
   The app downloads each board's TSV backend itself and posts to its post URL.
-  A gb2c URL is still optional in this mode for totoz/emoji search, attachment
-  uploads and LinuxFR OAuth.
+  A gb2c URL is still optional in this mode for emoji search, attachment uploads
+  and LinuxFR OAuth. Totoz search uses its own direct server setting below.
 
 The nickname is sent as the post `info`; if it is left empty, a gc2-style random
 nickname is generated. On an Android emulator, `localhost` is the emulator
@@ -194,6 +195,13 @@ board. A custom board needs:
 Custom boards are stored as JSON in `SharedPreferences` and can be removed from
 the same section. Built-in boards are read-only.
 
+The **Services** settings section contains the totoz server URL. It defaults to
+`https://nsfw.totoz.eu`, the same search server gb2c uses. The app queries
+`<server>/search.xml` directly and builds previews under `<server>/img/<name>`,
+so totoz search works in direct mode without a gb2c server. Leave the field
+empty to fall back to gb2c's `/gb2c/totoz/search` endpoint when a gb2c URL is
+configured.
+
 Direct mode is deliberately defensive: rows with fewer than five fields or with
 an invalid/non-positive id are skipped, duplicate ids keep the latest row, extra
 columns are dropped, control characters are removed, messages are capped at
@@ -213,7 +221,7 @@ columns are dropped, control characters are removed, messages are capped at
 
 Settings are stored locally in `SharedPreferences`:
 
-- connection mode, server URL and nickname;
+- connection mode, server URL, totoz server URL and nickname;
 - selected tribunes and custom board definitions;
 - local blocked identities and hide/gray mode;
 - plop list;
@@ -237,8 +245,9 @@ In gb2c mode:
 | `/gb2c/linuxfr/refresh` | refresh a LinuxFR token |
 
 In direct board mode, each configured board's `backendUrl` (TSV) and `postUrl`
-(form POST) are contacted directly. The optional gb2c server is only used for
-totoz/emoji search, attachments and LinuxFR OAuth.
+(form POST) are contacted directly. Totoz search and previews use the configured
+totoz server (`search.xml` and `/img/`). The optional gb2c server is only used
+for emoji search, attachments and LinuxFR OAuth.
 
 The LinuxFR redirect configured on the gb2c server must be reachable from the
 device. gb2c currently builds that redirect with `https://`, so a gb2c instance
@@ -274,7 +283,8 @@ app/src/test/                  parser, conversation, TSV and board client tests
   on the server. Local blocked identities are editable in the app.
 - Attachments are inserted as their public URL in the composer, like gc2. They
   need a gb2c server URL even in direct board mode.
-- Totoz images are loaded from `nsfw.totoz.eu`.
+- Totoz images are loaded from the configured totoz server
+  (`https://nsfw.totoz.eu` by default).
 - LinuxFR is only needed to post to the `dlfp` tribune. OAuth uses a dedicated
   WebView so the token stays in the app and passwords are only entered on
   linuxfr.org. Connecting or refreshing a LinuxFR account requires a gb2c server

@@ -34,6 +34,10 @@ class Preferences(context: Context) {
         get() = prefs.getString(KEY_CUSTOM_BOARDS, "").orEmpty()
         set(value) = prefs.edit { putString(KEY_CUSTOM_BOARDS, value) }
 
+    var totozServerUrl: String
+        get() = prefs.getString(KEY_TOTOZ_SERVER, TotozServer.DEFAULT_URL).orEmpty()
+        set(value) = prefs.edit { putString(KEY_TOTOZ_SERVER, value) }
+
     var nickname: String
         get() = prefs.getString(KEY_NICKNAME, "").orEmpty()
         set(value) = prefs.edit { putString(KEY_NICKNAME, value) }
@@ -124,6 +128,7 @@ class Preferences(context: Context) {
         const val KEY_SERVER = "server_url"
         const val KEY_CONNECTION_MODE = "connection_mode"
         const val KEY_CUSTOM_BOARDS = "custom_boards"
+        const val KEY_TOTOZ_SERVER = "totoz_server_url"
         const val KEY_NICKNAME = "nickname"
         const val KEY_TRIBUNES = "tribunes"
         const val KEY_KNOWN_TRIBUNES = "known_tribunes"

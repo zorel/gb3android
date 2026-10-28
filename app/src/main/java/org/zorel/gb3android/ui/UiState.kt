@@ -7,6 +7,7 @@ import org.zorel.gb3android.data.LinuxfrSession
 import org.zorel.gb3android.data.Post
 import org.zorel.gb3android.data.Screen
 import org.zorel.gb3android.data.TextDraft
+import org.zorel.gb3android.data.TotozServer
 import org.zorel.gb3android.data.TribuneBadge
 import org.zorel.gb3android.domain.ParsedMessage
 
@@ -26,6 +27,7 @@ data class UiState(
     val serverUrl: String = "",
     val connectionMode: ConnectionMode = ConnectionMode.Server,
     val boards: List<Board> = emptyList(),
+    val totozServerUrl: String = TotozServer.DEFAULT_URL,
     val nickname: String = "",
     val availableTribunes: List<String> = emptyList(),
     val tribunes: List<String> = emptyList(),
@@ -61,6 +63,7 @@ data class UiState(
 data class SettingsInput(
     val serverUrl: String,
     val connectionMode: ConnectionMode,
+    val totozServerUrl: String,
     val nickname: String,
     val selectedTribunes: Set<String>,
     val blockedIdentities: String,

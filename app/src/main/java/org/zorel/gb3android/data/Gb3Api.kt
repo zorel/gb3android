@@ -27,9 +27,13 @@ import okhttp3.sse.EventSourceListener
 import okhttp3.sse.EventSources
 import org.json.JSONArray
 import org.json.JSONObject
+import org.w3c.dom.Element
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import javax.xml.XMLConstants
+import javax.xml.parsers.DocumentBuilderFactory
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -128,6 +132,20 @@ class Gb3Api(
                         }
                     }
                 }
+            }
+        }
+
+    /**
+     * Query a totoz server directly (default `https://nsfw.totoz.eu`), without
+     * a gb2c proxy. The XML format is the one gb2c itself consumes.
+     */
+    suspend fun searchTotozDirect(serverUrl: String, terms: String): List<Totoz> =
+        withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val url = TotozServer.searchUrl(serverUrl, terms)
+                ?: throw Gb3Exception("invalid totoz server URL")
+            execute(request(url.toString())).use { response ->
+                requireSuccess(response)
+                parseTotozXml(readBoundedBody(response), serverUrl)
             }
         }
 
@@ -314,6 +332,69 @@ class Gb3Api(
     private fun encodeQuery(value: String): String =
         java.net.URLEncoder.encode(value, Charsets.UTF_8.name())
 
+    private fun readBoundedBody(response: Response, maxBytes: Int = MAX_TOTOZ_BYTES): String {
+        val body = response.body ?: return ""
+        if (body.contentLength() > maxBytes) {
+            throw Gb3Exception("totoz server response is too large")
+        }
+        val output = ByteArrayOutputStream()
+        body.byteStream().use { input ->
+            val buffer = ByteArray(16 * 1024)
+            var total = 0
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                total += count
+                if (total > maxBytes) {
+                    throw Gb3Exception("totoz server response is too large")
+                }
+                output.write(buffer, 0, count)
+            }
+        }
+        return output.toString(Charsets.UTF_8.name())
+    }
+
+    private fun parseTotozXml(body: String, serverUrl: String): List<Totoz> {
+        if (body.isBlank()) return emptyList()
+        val document = try {
+            val factory = DocumentBuilderFactory.newInstance()
+            factory.isNamespaceAware = false
+            factory.isExpandEntityReferences = false
+            runCatching { factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true) }
+            runCatching {
+                factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+            }
+            runCatching {
+                factory.setFeature("http://xml.org/sax/features/external-general-entities", false)
+            }
+            runCatching {
+                factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false)
+            }
+            factory.newDocumentBuilder()
+                .parse(ByteArrayInputStream(body.toByteArray(Charsets.UTF_8)))
+        } catch (error: Exception) {
+            throw Gb3Exception("cannot decode totoz search results", error)
+        }
+
+        val nodes = document.getElementsByTagName("totoz")
+        return buildList {
+            for (index in 0 until nodes.length) {
+                val element = nodes.item(index) as? Element ?: continue
+                val name = childText(element, "name").trim()
+                if (name.isEmpty()) continue
+                add(
+                    Totoz(
+                        name = name,
+                        image = TotozServer.imageUrl(serverUrl, name).orEmpty(),
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun childText(element: Element, tag: String): String =
+        element.getElementsByTagName(tag).item(0)?.textContent.orEmpty()
+
     private fun attachmentFileName(contentResolver: ContentResolver, uri: Uri): String {
         var name = uri.lastPathSegment ?: "attachment"
         runCatching {
@@ -350,6 +431,8 @@ class Gb3Api(
     }
 
     companion object {
+        private const val MAX_TOTOZ_BYTES = 2 * 1024 * 1024
+
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)

@@ -22,6 +22,7 @@ import org.zorel.gb3android.data.PredefinedBoards
 import org.zorel.gb3android.data.Screen
 import org.zorel.gb3android.data.TextDraft
 import org.zorel.gb3android.data.Totoz
+import org.zorel.gb3android.data.TotozServer
 import org.zorel.gb3android.data.TribuneBadge
 import org.zorel.gb3android.data.csvSet
 import org.zorel.gb3android.data.randomNickname
@@ -118,6 +119,7 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
             serverUrl = prefs.serverUrl,
             connectionMode = mode,
             boards = boards,
+            totozServerUrl = prefs.totozServerUrl,
             nickname = nickname,
             availableTribunes = if (mode == ConnectionMode.DirectBoards) {
                 boardNames.sorted()
@@ -940,6 +942,14 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         }
         val effectiveServer = normalized.orEmpty()
         val serverChanged = effectiveServer != current.serverUrl
+        val totozServer = if (input.totozServerUrl.isBlank()) {
+            ""
+        } else {
+            TotozServer.normalizeUrl(input.totozServerUrl) ?: run {
+                emit(tr(R.string.error_invalid_totoz_server), isError = true)
+                return false
+            }
+        }
         val nickname = input.nickname.trim().ifBlank {
             current.nickname.ifBlank { randomNickname() }
         }
@@ -967,6 +977,7 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         val resetSelection = mode == ConnectionMode.Server && (serverChanged || modeChanged)
         prefs.serverUrl = effectiveServer
         prefs.connectionMode = mode
+        prefs.totozServerUrl = totozServer
         prefs.nickname = nickname
         prefs.localBlockedIdentitiesCsv = blocked.joinToString(",")
         prefs.blockedDisplayMode = input.displayMode
@@ -978,6 +989,7 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
             it.copy(
                 serverUrl = effectiveServer,
                 connectionMode = mode,
+                totozServerUrl = totozServer,
                 nickname = nickname,
                 localBlocked = blocked,
                 displayMode = input.displayMode,
@@ -1227,12 +1239,18 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     suspend fun searchTotoz(terms: String): Result<List<Totoz>> {
-        val baseUrl = _state.value.serverUrl
-        if (baseUrl.isBlank()) {
-            return Result.failure(IOException(tr(R.string.error_totoz_needs_server)))
-        }
+        val current = _state.value
+        val totozServer = current.totozServerUrl.trim()
+        val baseUrl = current.serverUrl
         return try {
-            Result.success(api.searchTotoz(baseUrl, terms))
+            when {
+                totozServer.isNotBlank() ->
+                    Result.success(api.searchTotozDirect(totozServer, terms))
+                baseUrl.isNotBlank() ->
+                    Result.success(api.searchTotoz(baseUrl, terms))
+                else ->
+                    Result.success(api.searchTotozDirect(TotozServer.DEFAULT_URL, terms))
+            }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {

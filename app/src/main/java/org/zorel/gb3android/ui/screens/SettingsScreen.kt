@@ -52,6 +52,7 @@ import org.zorel.gb3android.data.Board
 import org.zorel.gb3android.data.BoardAuth
 import org.zorel.gb3android.data.BoardValidationError
 import org.zorel.gb3android.data.ConnectionMode
+import org.zorel.gb3android.data.TotozServer
 import org.zorel.gb3android.data.csvSet
 import org.zorel.gb3android.ui.SettingsInput
 import org.zorel.gb3android.ui.UiState
@@ -71,6 +72,7 @@ fun SettingsScreen(
     onRemoveBoard: (String) -> Boolean,
 ) {
     var serverUrl by rememberSaveable { mutableStateOf(state.serverUrl) }
+    var totozServerUrl by rememberSaveable { mutableStateOf(state.totozServerUrl) }
     var nickname by rememberSaveable { mutableStateOf(state.nickname) }
     var selectedCsv by rememberSaveable { mutableStateOf(state.tribunes.joinToString(",")) }
     var blocked by rememberSaveable { mutableStateOf(state.localBlocked.joinToString(",")) }
@@ -184,6 +186,7 @@ fun SettingsScreen(
                                     } else {
                                         ConnectionMode.Server
                                     },
+                                    totozServerUrl = totozServerUrl,
                                     nickname = nickname,
                                     selectedTribunes = selected,
                                     blockedIdentities = blocked,
@@ -262,6 +265,23 @@ fun SettingsScreen(
                         text = stringResource(R.string.settings_linuxfr_note),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            item {
+                SettingsSection(stringResource(R.string.settings_services)) {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = totozServerUrl,
+                        onValueChange = { totozServerUrl = it },
+                        label = { Text(stringResource(R.string.settings_totoz_server)) },
+                        placeholder = { Text(TotozServer.DEFAULT_URL) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                        modifier = Modifier.fillMaxWidth(),
+                        supportingText = {
+                            Text(stringResource(R.string.settings_totoz_server_support))
+                        },
                     )
                 }
             }
@@ -471,6 +491,7 @@ fun SettingsScreen(
                                 } else {
                                     ConnectionMode.Server
                                 },
+                                totozServerUrl = totozServerUrl,
                                 nickname = nickname,
                                 selectedTribunes = selected,
                                 blockedIdentities = blocked,

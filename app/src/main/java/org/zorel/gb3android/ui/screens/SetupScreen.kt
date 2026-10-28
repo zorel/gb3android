@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.zorel.gb3android.R
 import org.zorel.gb3android.data.ConnectionMode
+import org.zorel.gb3android.data.TotozServer
 import org.zorel.gb3android.data.csvSet
 import org.zorel.gb3android.ui.SettingsInput
 import org.zorel.gb3android.ui.UiState
@@ -49,6 +50,7 @@ fun SetupScreen(
 ) {
     val palette = LocalGb3Palette.current
     var serverUrl by rememberSaveable { mutableStateOf(state.serverUrl) }
+    var totozServerUrl by rememberSaveable { mutableStateOf(state.totozServerUrl) }
     var nickname by rememberSaveable { mutableStateOf(state.nickname) }
     var modeName by rememberSaveable { mutableStateOf(state.connectionMode.name) }
     var directSelectionCsv by rememberSaveable {
@@ -139,6 +141,21 @@ fun SetupScreen(
             )
             Spacer(Modifier.height(10.dp))
             OutlinedTextField(
+                value = totozServerUrl,
+                onValueChange = { totozServerUrl = it },
+                label = { Text(stringResource(R.string.settings_totoz_server)) },
+                placeholder = { Text(TotozServer.DEFAULT_URL) },
+                singleLine = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    keyboardType = KeyboardType.Uri,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                supportingText = {
+                    Text(stringResource(R.string.settings_totoz_server_support))
+                },
+            )
+            Spacer(Modifier.height(10.dp))
+            OutlinedTextField(
                 value = nickname,
                 onValueChange = { nickname = it },
                 label = { Text(stringResource(R.string.setup_nickname)) },
@@ -199,6 +216,7 @@ fun SetupScreen(
                             } else {
                                 ConnectionMode.Server
                             },
+                            totozServerUrl = totozServerUrl,
                             nickname = nickname,
                             selectedTribunes = if (directMode) selectedBoards else emptySet(),
                             blockedIdentities = state.localBlocked.joinToString(","),

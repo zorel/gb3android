@@ -101,8 +101,11 @@
     <string name="settings_save">Enregistrer les réglages</string>
     <string name="settings_refresh_boards">Actualiser les tribunes</string>
     <string name="settings_refresh_tribunes">Actualiser les tribunes</string>
-    <string name="settings_error_save">URL de serveur ou sélection de tribunes invalide</string>
+    <string name="settings_error_save">URL de serveur, URL totoz ou sélection de tribunes invalide</string>
     <string name="settings_identity">Identité</string>
+    <string name="settings_services">Services</string>
+    <string name="settings_totoz_server">URL du serveur totoz</string>
+    <string name="settings_totoz_server_support">Serveur de recherche direct des totoz. Laissez vide pour utiliser le serveur gb2c s’il est configuré.</string>
     <string name="settings_nickname">Pseudo</string>
     <string name="settings_nickname_support">Envoyé comme info du message. Laissez vide pour en générer un.</string>
     <string name="settings_linuxfr_connected">LinuxFR connecté en tant que %1$s</string>
@@ -161,6 +164,7 @@
 
     <!-- Snackbar messages -->
     <string name="error_invalid_server">URL de serveur invalide</string>
+    <string name="error_invalid_totoz_server">URL de serveur totoz invalide</string>
     <string name="error_no_board_selected">Aucune tribune sélectionnée</string>
     <string name="error_select_board">Sélectionnez au moins une tribune</string>
     <string name="error_reconnect_board_background">Revenez dans l’application pour reprendre l’actualisation des tribunes</string>
