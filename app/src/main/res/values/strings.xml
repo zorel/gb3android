@@ -161,6 +161,8 @@
     <string name="linuxfr_unreadable">The LinuxFR server returned an unreadable token.</string>
     <string name="linuxfr_instructions">Sign in on linuxfr.org. The app captures the token when the server redirects back to /linuxfr.html; it never sees your password.</string>
     <string name="linuxfr_unreachable">Cannot reach LinuxFR authorisation: %1$s</string>
+    <string name="linuxfr_not_configured">This gb2c server does not provide LinuxFR login. Set GB2C_LINUXFR_CLIENT_ID and GB2C_LINUXFR_CLIENT_SECRET on the server, then restart it.</string>
+    <string name="linuxfr_http_error">The gb2c server refused the LinuxFR authorisation (HTTP %1$d).</string>
 
     <!-- Snackbar messages -->
     <string name="error_invalid_server">Invalid server URL</string>

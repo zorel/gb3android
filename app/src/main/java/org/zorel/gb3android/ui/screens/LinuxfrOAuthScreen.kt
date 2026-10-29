@@ -6,6 +6,7 @@ import android.util.Base64
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.Column
@@ -169,6 +170,24 @@ fun LinuxfrOAuthScreen(
                                     error = context.getString(
                                         R.string.linuxfr_unreachable,
                                         webError.description,
+                                    )
+                                }
+                            }
+
+                            override fun onReceivedHttpError(
+                                view: WebView,
+                                request: WebResourceRequest,
+                                errorResponse: WebResourceResponse,
+                            ) {
+                                if (!request.isForMainFrame) return
+                                if (request.url.path?.endsWith("/gb2c/linuxfr/authorize") != true) return
+                                loading = false
+                                error = if (errorResponse.statusCode == 404) {
+                                    context.getString(R.string.linuxfr_not_configured)
+                                } else {
+                                    context.getString(
+                                        R.string.linuxfr_http_error,
+                                        errorResponse.statusCode,
                                     )
                                 }
                             }

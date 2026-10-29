@@ -161,6 +161,8 @@
     <string name="linuxfr_unreadable">Le serveur LinuxFR a renvoyé un jeton illisible.</string>
     <string name="linuxfr_instructions">Connectez-vous sur linuxfr.org. L’application récupère le jeton lorsque le serveur redirige vers /linuxfr.html ; elle ne voit jamais votre mot de passe.</string>
     <string name="linuxfr_unreachable">Impossible de joindre l’autorisation LinuxFR : %1$s</string>
+    <string name="linuxfr_not_configured">Ce serveur gb2c ne propose pas la connexion LinuxFR. Renseignez GB2C_LINUXFR_CLIENT_ID et GB2C_LINUXFR_CLIENT_SECRET sur le serveur, puis redémarrez-le.</string>
+    <string name="linuxfr_http_error">Le serveur gb2c a refusé l’autorisation LinuxFR (HTTP %1$d).</string>
 
     <!-- Snackbar messages -->
     <string name="error_invalid_server">URL de serveur invalide</string>
