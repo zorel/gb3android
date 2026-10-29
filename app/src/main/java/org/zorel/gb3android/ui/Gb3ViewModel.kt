@@ -721,9 +721,10 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         val suffix = if (post.tribune != active) "@${post.tribune}" else ""
         // A bare clock always means "today". Use the long form when the post is
         // older so the reference cannot resolve to today's post at that time.
+        // The space separator is the readable 8601 variant accepted by gb3.
         val today = java.time.LocalDate.now().toString()
         val clock = if (post.fullDate.isNotBlank() && post.fullDate != today) {
-            "${post.fullDate}T${post.clock}"
+            "${post.fullDate} ${post.clock}"
         } else {
             post.clock
         }
