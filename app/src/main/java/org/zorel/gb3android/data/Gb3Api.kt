@@ -232,7 +232,7 @@ class Gb3Api(
             emit(PollEvent.Connecting)
             var connected = false
             try {
-                pollOnce(pollUrl).collect { event ->
+                pollOnce(pollUrl, baseUrl).collect { event ->
                     if (event is PollEvent.Connected) {
                         connected = true
                         attempt = 0
@@ -250,7 +250,7 @@ class Gb3Api(
         }
     }
 
-    private fun pollOnce(url: HttpUrl): Flow<PollEvent> = callbackFlow {
+    private fun pollOnce(url: HttpUrl, baseUrl: String): Flow<PollEvent> = callbackFlow {
         val request = Request.Builder()
             .url(url)
             .header("Accept", "text/event-stream")
@@ -271,7 +271,7 @@ class Gb3Api(
                 data: String,
             ) {
                 if (type != null && type != "message") return
-                val post = parsePost(data) ?: return
+                val post = parsePost(data, SourceId.Gb2c(baseUrl)) ?: return
                 trySendBlocking(PollEvent.NewPost(post))
             }
 
@@ -291,7 +291,7 @@ class Gb3Api(
         awaitClose { source.cancel() }
     }
 
-    private fun parsePost(data: String): Post? = runCatching {
+    private fun parsePost(data: String, source: SourceId): Post? = runCatching {
         val json = JSONObject(data)
         Post(
             id = json.optLong("id"),
@@ -300,6 +300,7 @@ class Gb3Api(
             login = json.optString("login"),
             message = json.optString("message"),
             tribune = json.optString("tribune"),
+            source = source,
         )
     }.getOrNull()?.takeIf { it.tribune.isNotBlank() && it.id > 0 }
 
@@ -441,12 +442,15 @@ class Gb3Api(
             .build()
 
         fun normalizeServerUrl(raw: String): String? {
-            var value = raw.trim()
+            val value = raw.trim()
             if (value.isEmpty()) return null
-            if (!value.startsWith("http://") && !value.startsWith("https://")) {
-                value = "http://$value"
+            val scheme = value.substringBefore("://", "").lowercase()
+            val withScheme = when {
+                scheme == "http" || scheme == "https" -> value
+                value.contains("://") -> return null
+                else -> "http://$value"
             }
-            val url = value.toHttpUrlOrNull() ?: return null
+            val url = withScheme.toHttpUrlOrNull() ?: return null
             return url.toString().trimEnd('/')
         }
     }

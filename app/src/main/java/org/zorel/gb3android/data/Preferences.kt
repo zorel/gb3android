@@ -3,6 +3,7 @@ package org.zorel.gb3android.data
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import org.json.JSONObject
 
 /**
  * Small persistence layer replacing the browser localStorage used by gc2.
@@ -13,26 +14,43 @@ class Preferences(context: Context) {
     private val prefs: SharedPreferences =
         context.applicationContext.getSharedPreferences("gb3", Context.MODE_PRIVATE)
 
+    /**
+     * Legacy single-server URL. It is still used as the optional gb2c helper
+     * for emoji, attachments and LinuxFR when no server is enabled.
+     */
     var serverUrl: String
         get() = prefs.getString(KEY_SERVER, "").orEmpty()
         set(value) = prefs.edit { putString(KEY_SERVER, value) }
 
-    var connectionMode: ConnectionMode
+    /** Legacy connection mode, only read while migrating older settings. */
+    val legacyConnectionMode: ConnectionMode
         get() = if (prefs.getString(KEY_CONNECTION_MODE, null) == "direct") {
             ConnectionMode.DirectBoards
         } else {
             ConnectionMode.Server
         }
-        set(value) = prefs.edit {
-            putString(
-                KEY_CONNECTION_MODE,
-                if (value == ConnectionMode.DirectBoards) "direct" else "server",
-            )
-        }
 
     var customBoardsJson: String
         get() = prefs.getString(KEY_CUSTOM_BOARDS, "").orEmpty()
         set(value) = prefs.edit { putString(KEY_CUSTOM_BOARDS, value) }
+
+    var gb2cServersJson: String
+        get() = prefs.getString(KEY_GB2C_SERVERS, "").orEmpty()
+        set(value) = prefs.edit { putString(KEY_GB2C_SERVERS, value) }
+
+    var selectedBoardsCsv: String
+        get() = prefs.getString(KEY_SELECTED_BOARDS, "").orEmpty()
+        set(value) = prefs.edit { putString(KEY_SELECTED_BOARDS, value) }
+
+    var knownGb2cTribunesJson: String
+        get() = prefs.getString(KEY_KNOWN_GB2C_TRIBUNES, "").orEmpty()
+        set(value) = prefs.edit { putString(KEY_KNOWN_GB2C_TRIBUNES, value) }
+
+    var activeTribuneKey: String?
+        get() = prefs.getString(KEY_ACTIVE_TRIBUNE, null)
+        set(value) = prefs.edit {
+            if (value == null) remove(KEY_ACTIVE_TRIBUNE) else putString(KEY_ACTIVE_TRIBUNE, value)
+        }
 
     var totozServerUrl: String
         get() = prefs.getString(KEY_TOTOZ_SERVER, TotozServer.DEFAULT_URL).orEmpty()
@@ -42,11 +60,12 @@ class Preferences(context: Context) {
         get() = prefs.getString(KEY_NICKNAME, "").orEmpty()
         set(value) = prefs.edit { putString(KEY_NICKNAME, value) }
 
-    /** Raw comma-separated list, as edited in the settings screen. */
+    /** Legacy comma-separated selection, only read while migrating. */
     var selectedTribunesCsv: String
         get() = prefs.getString(KEY_TRIBUNES, "").orEmpty()
         set(value) = prefs.edit { putString(KEY_TRIBUNES, value) }
 
+    /** Legacy known tribunes, only read while migrating. */
     var knownTribunesCsv: String
         get() = prefs.getString(KEY_KNOWN_TRIBUNES, "").orEmpty()
         set(value) = prefs.edit { putString(KEY_KNOWN_TRIBUNES, value) }
@@ -107,16 +126,117 @@ class Preferences(context: Context) {
             }
         }
 
-    fun lastReadPostId(tribune: String): Long =
-        prefs.getLong(lastReadKey(tribune), -1L)
+    /**
+     * Configured gb2c servers, migrating the single-server settings used by
+     * earlier releases. A `null` preference means "not migrated yet"; an empty
+     * JSON array means the user really removed every server.
+     */
+    fun loadGb2cServers(): List<Gb2cServer> {
+        val raw = prefs.getString(KEY_GB2C_SERVERS, null)
+        if (raw != null) return Gb2cServerCodec.decode(raw)
 
-    fun setLastReadPostId(tribune: String, postId: Long) {
-        prefs.edit { putLong(lastReadKey(tribune), postId) }
+        val legacyUrl = Gb3Api.normalizeServerUrl(serverUrl) ?: run {
+            gb2cServersJson = Gb2cServerCodec.encode(emptyList())
+            return emptyList()
+        }
+        val migrated = if (legacyConnectionMode == ConnectionMode.Server) {
+            listOf(
+                Gb2cServer(
+                    name = Gb2cServer.defaultName(legacyUrl),
+                    url = legacyUrl,
+                    enabled = true,
+                ),
+            )
+        } else {
+            emptyList()
+        }
+        gb2cServersJson = Gb2cServerCodec.encode(migrated)
+        return migrated
     }
 
-    fun markAllRead(tribunes: Collection<String>, maxIdByTribune: Map<String, Long>) {
+    fun saveGb2cServers(servers: List<Gb2cServer>) {
+        gb2cServersJson = Gb2cServerCodec.encode(servers)
+    }
+
+    /**
+     * Direct boards selected as tribunes. Migrates the old direct-mode
+     * selection the first time the new preference is absent.
+     */
+    fun loadSelectedBoards(boardNames: Set<String>): Set<String> {
+        val raw = prefs.getString(KEY_SELECTED_BOARDS, null)
+        if (raw != null) {
+            return raw.csvSet().filter { it in boardNames }.toSet()
+        }
+        val migrated = if (legacyConnectionMode == ConnectionMode.DirectBoards) {
+            selectedTribunesCsv.csvSet().filter { it in boardNames }.toSet()
+        } else {
+            emptySet()
+        }
+        selectedBoardsCsv = migrated.toCsv()
+        return migrated
+    }
+
+    fun saveSelectedBoards(boards: Set<String>) {
+        selectedBoardsCsv = boards.toCsv()
+    }
+
+    /** Cached tribune names per gb2c server URL. */
+    fun loadKnownTribunes(): Map<String, List<String>> {
+        val raw = prefs.getString(KEY_KNOWN_GB2C_TRIBUNES, null)
+        if (raw != null) {
+            if (raw.isBlank()) return emptyMap()
+            return runCatching {
+                val json = JSONObject(raw)
+                buildMap {
+                    for (url in json.keys()) {
+                        val array = json.optJSONArray(url) ?: continue
+                        val names = buildList {
+                            for (index in 0 until array.length()) {
+                                val name = array.optString(index, "")
+                                if (name.isNotBlank()) add(name)
+                            }
+                        }
+                        put(url, names.sorted())
+                    }
+                }
+            }.getOrDefault(emptyMap())
+        }
+
+        val legacyUrl = Gb3Api.normalizeServerUrl(serverUrl) ?: run {
+            knownGb2cTribunesJson = "{}"
+            return emptyMap()
+        }
+        val names = knownTribunesCsv.csvSet().toList().sorted()
+        val migrated = if (names.isEmpty()) emptyMap() else mapOf(legacyUrl to names)
+        saveKnownTribunes(migrated)
+        return migrated
+    }
+
+    fun saveKnownTribunes(byUrl: Map<String, List<String>>) {
+        val json = JSONObject()
+        for ((url, names) in byUrl) {
+            val array = org.json.JSONArray()
+            names.sorted().forEach(array::put)
+            json.put(url, array)
+        }
+        knownGb2cTribunesJson = json.toString()
+    }
+
+    fun lastReadPostId(tribuneKey: String): Long {
+        val key = lastReadKey(tribuneKey)
+        if (prefs.contains(key)) return prefs.getLong(key, -1L)
+        // Preserve markers written by releases that only knew tribune names.
+        val legacyName = tribuneKey.substringAfterLast('|')
+        return prefs.getLong(lastReadKey(legacyName), -1L)
+    }
+
+    fun setLastReadPostId(tribuneKey: String, postId: Long) {
+        prefs.edit { putLong(lastReadKey(tribuneKey), postId) }
+    }
+
+    fun markAllRead(tribuneKeys: Collection<String>, maxIdByTribune: Map<String, Long>) {
         prefs.edit(commit = true) {
-            for (tribune in tribunes) {
+            for (tribune in tribuneKeys) {
                 maxIdByTribune[tribune]?.let { putLong(lastReadKey(tribune), it) }
             }
         }
@@ -128,6 +248,10 @@ class Preferences(context: Context) {
         const val KEY_SERVER = "server_url"
         const val KEY_CONNECTION_MODE = "connection_mode"
         const val KEY_CUSTOM_BOARDS = "custom_boards"
+        const val KEY_GB2C_SERVERS = "gb2c_servers"
+        const val KEY_SELECTED_BOARDS = "selected_boards"
+        const val KEY_KNOWN_GB2C_TRIBUNES = "known_gb2c_tribunes"
+        const val KEY_ACTIVE_TRIBUNE = "active_tribune_key"
         const val KEY_TOTOZ_SERVER = "totoz_server_url"
         const val KEY_NICKNAME = "nickname"
         const val KEY_TRIBUNES = "tribunes"

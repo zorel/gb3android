@@ -74,6 +74,8 @@ import coil.size.Size
 import org.zorel.gb3android.R
 import org.zorel.gb3android.data.Post
 import org.zorel.gb3android.data.Screen
+import org.zorel.gb3android.data.SourceId
+import org.zorel.gb3android.data.SourceStatus
 import org.zorel.gb3android.data.TextDraft
 import org.zorel.gb3android.data.TotozServer
 import org.zorel.gb3android.ui.components.AltSheet
@@ -178,7 +180,7 @@ fun Gb3App(viewModel: Gb3ViewModel) {
         Surface(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.fillMaxSize()) {
                 when {
-                    state.setupRequired || (!state.directBoards && state.serverUrl.isBlank()) -> {
+                    state.setupRequired && state.screen == Screen.Main -> {
                         SetupScreen(state = state, onConnect = viewModel::saveSettings)
                     }
 
@@ -340,8 +342,15 @@ private fun MainScreen(
             Spacer(Modifier.width(10.dp))
             val active = state.activeTribune
             if (active != null) {
+                val sourceLabel = when (val source = active.source) {
+                    is SourceId.Gb2c -> stringResource(
+                        R.string.source_gb2c,
+                        state.serverName(source.url) ?: source.url,
+                    )
+                    is SourceId.Direct -> stringResource(R.string.source_board)
+                }
                 Text(
-                    text = "/ $active",
+                    text = "/ ${active.name} · $sourceLabel",
                     style = MaterialTheme.typography.bodySmall,
                     color = palette.muted,
                     maxLines = 1,
@@ -353,10 +362,10 @@ private fun MainScreen(
             }
             ConnectionStatus(state)
             Spacer(Modifier.width(10.dp))
-            if (state.badges.any { (name, badge) -> name != state.activeTribune && badge.hasBigorno }) {
+            if (state.badges.any { (key, badge) -> key != state.activeKey && badge.hasBigorno }) {
                 Text("📢", fontSize = 13.sp)
             }
-            if (state.badges.any { (name, badge) -> name != state.activeTribune && badge.hasReply }) {
+            if (state.badges.any { (key, badge) -> key != state.activeKey && badge.hasReply }) {
                 Text("↩", fontSize = 13.sp, color = palette.reply)
             }
             AlarmClock()
@@ -368,9 +377,11 @@ private fun MainScreen(
             }
         }
         TribuneBar(
-            tribunes = state.tribunes,
-            activeTribune = state.activeTribune,
+            groups = state.tribuneGroups(),
+            activeKey = state.activeKey,
             badges = state.badges,
+            gb2cStatus = state.gb2cStatus,
+            boardStatus = state.boardStatus,
             onSelect = onSelectTribune,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -405,18 +416,23 @@ private fun MainScreen(
 private fun ConnectionStatus(state: UiState) {
     val colors = MaterialTheme.colorScheme
     val palette = LocalGb3Palette.current
+    val status = state.activeStatus ?: when {
+        state.connected -> SourceStatus.Online
+        state.connecting -> SourceStatus.Working
+        else -> SourceStatus.Error
+    }
     val color: Color
     val label: String
-    when {
-        state.connected -> {
+    when (status) {
+        SourceStatus.Online -> {
             color = colors.secondary
             label = stringResource(R.string.main_stream_live)
         }
-        state.connecting -> {
+        SourceStatus.Working -> {
             color = colors.tertiary
             label = stringResource(R.string.main_stream_sync)
         }
-        else -> {
+        SourceStatus.Error -> {
             color = colors.error
             label = stringResource(R.string.main_stream_offline)
         }

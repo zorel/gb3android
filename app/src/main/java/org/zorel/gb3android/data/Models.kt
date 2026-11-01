@@ -8,8 +8,11 @@ data class Post(
     val login: String,
     val message: String,
     val tribune: String,
+    val source: SourceId,
 ) {
-    val key: String get() = keyOf(tribune, id)
+    val key: String get() = keyOf(source, tribune, id)
+
+    val tribuneKey: TribuneKey get() = TribuneKey(source, tribune)
 
     /** gb2c uses the compact `yyyyMMddHHmmss` format, but be tolerant of ISO-ish input. */
     private val timeDigits: String
@@ -37,7 +40,8 @@ data class Post(
         get() = trimIdentity(login.ifBlank { shortBrowserUserAgent(info) })
 
     companion object {
-        fun keyOf(tribune: String, id: Long): String = "$tribune:$id"
+        fun keyOf(source: SourceId, tribune: String, id: Long): String =
+            "${source.key}|$tribune:$id"
     }
 }
 

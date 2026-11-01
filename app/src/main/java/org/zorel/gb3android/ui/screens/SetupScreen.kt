@@ -15,13 +15,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,7 +34,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.zorel.gb3android.R
-import org.zorel.gb3android.data.ConnectionMode
+import org.zorel.gb3android.data.Gb2cServer
 import org.zorel.gb3android.data.TotozServer
 import org.zorel.gb3android.data.csvSet
 import org.zorel.gb3android.ui.SettingsInput
@@ -49,26 +47,20 @@ fun SetupScreen(
     onConnect: (SettingsInput) -> Boolean,
 ) {
     val palette = LocalGb3Palette.current
-    var serverUrl by rememberSaveable { mutableStateOf(state.serverUrl) }
+    val initialServer = state.gb2cServers.firstOrNull { it.enabled }
+        ?: state.gb2cServers.firstOrNull()
+    var serverName by rememberSaveable { mutableStateOf(initialServer?.name.orEmpty()) }
+    var serverUrl by rememberSaveable { mutableStateOf(initialServer?.url.orEmpty()) }
     var totozServerUrl by rememberSaveable { mutableStateOf(state.totozServerUrl) }
     var nickname by rememberSaveable { mutableStateOf(state.nickname) }
-    var modeName by rememberSaveable { mutableStateOf(state.connectionMode.name) }
-    var directSelectionCsv by rememberSaveable {
-        mutableStateOf(state.tribunes.joinToString(","))
+    var selectedBoardsCsv by rememberSaveable {
+        mutableStateOf(state.selectedBoards.joinToString(","))
     }
     var error by remember { mutableStateOf<String?>(null) }
     val scrollState = rememberScrollState()
-    val directMode = modeName == ConnectionMode.DirectBoards.name
-    val selectedBoards = directSelectionCsv.csvSet()
-    val selectBoardError = stringResource(R.string.setup_error_select_board)
-    val optionalServerError = stringResource(R.string.setup_error_optional_server)
+    val selectedBoards = selectedBoardsCsv.csvSet()
+    val noSourceError = stringResource(R.string.setup_error_no_source)
     val serverError = stringResource(R.string.setup_error_server)
-
-    LaunchedEffect(state.boards, directMode) {
-        if (directMode && selectedBoards.isEmpty() && state.boards.isNotEmpty()) {
-            directSelectionCsv = state.boards.map { it.name }.joinToString(",")
-        }
-    }
 
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -94,33 +86,10 @@ fun SetupScreen(
                 color = palette.muted,
             )
             Spacer(Modifier.height(36.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = !directMode,
-                    onClick = { modeName = ConnectionMode.Server.name },
-                    label = { Text(stringResource(R.string.setup_mode_server)) },
-                )
-                FilterChip(
-                    selected = directMode,
-                    onClick = { modeName = ConnectionMode.DirectBoards.name },
-                    label = { Text(stringResource(R.string.setup_mode_direct)) },
-                )
-            }
-            Spacer(Modifier.height(16.dp))
             OutlinedTextField(
                 value = serverUrl,
                 onValueChange = { serverUrl = it },
-                label = {
-                    Text(
-                        stringResource(
-                            if (directMode) {
-                                R.string.setup_server_url_optional
-                            } else {
-                                R.string.setup_server_url
-                            },
-                        ),
-                    )
-                },
+                label = { Text(stringResource(R.string.setup_server_url_optional)) },
                 placeholder = { Text("https://gb3.example.com") },
                 singleLine = true,
                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
@@ -128,16 +97,17 @@ fun SetupScreen(
                 ),
                 modifier = Modifier.fillMaxWidth(),
                 supportingText = {
-                    Text(
-                        stringResource(
-                            if (directMode) {
-                                R.string.setup_server_optional_support
-                            } else {
-                                R.string.setup_server_support
-                            },
-                        ),
-                    )
+                    Text(stringResource(R.string.setup_server_optional_support))
                 },
+            )
+            Spacer(Modifier.height(10.dp))
+            OutlinedTextField(
+                value = serverName,
+                onValueChange = { serverName = it },
+                label = { Text(stringResource(R.string.settings_server_name)) },
+                placeholder = { Text(stringResource(R.string.settings_server_name_placeholder)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(10.dp))
             OutlinedTextField(
@@ -163,70 +133,74 @@ fun SetupScreen(
                 modifier = Modifier.fillMaxWidth(),
                 supportingText = { Text(stringResource(R.string.setup_nickname_support)) },
             )
-            if (directMode) {
-                Spacer(Modifier.height(18.dp))
-                Text(
-                    text = stringResource(R.string.setup_boards),
-                    style = MaterialTheme.typography.titleMedium,
+            Spacer(Modifier.height(18.dp))
+            Text(
+                text = stringResource(R.string.setup_boards),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                text = stringResource(R.string.setup_boards_support),
+                style = MaterialTheme.typography.bodySmall,
+                color = palette.muted,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            state.boards.forEach { board ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth(),
-                )
-                Text(
-                    text = stringResource(R.string.setup_boards_support),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = palette.muted,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                state.boards.forEach { board ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Checkbox(
-                            checked = board.name in selectedBoards,
-                            onCheckedChange = { checked ->
-                                val next = if (checked) {
-                                    selectedBoards + board.name
-                                } else {
-                                    selectedBoards - board.name
-                                }
-                                directSelectionCsv = next.sorted().joinToString(",")
-                                if (next.isNotEmpty()) error = null
-                            },
-                        )
-                        Text(
-                            text = board.name,
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.padding(start = 4.dp),
-                        )
-                    }
+                ) {
+                    Checkbox(
+                        checked = board.name in selectedBoards,
+                        onCheckedChange = { checked ->
+                            val next = if (checked) {
+                                selectedBoards + board.name
+                            } else {
+                                selectedBoards - board.name
+                            }
+                            selectedBoardsCsv = next.sorted().joinToString(",")
+                            if (next.isNotEmpty()) error = null
+                        },
+                    )
+                    Text(
+                        text = board.name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.padding(start = 4.dp),
+                    )
                 }
             }
             Spacer(Modifier.height(20.dp))
             Button(
                 onClick = {
-                    if (directMode && selectedBoards.isEmpty()) {
-                        error = selectBoardError
+                    val typed = if (serverUrl.isBlank()) {
+                        null
+                    } else {
+                        Gb2cServer(serverName, serverUrl, enabled = true).normalized()
+                    }
+                    if (typed != null && typed.validationError() != null) {
+                        error = serverError
+                        return@Button
+                    }
+                    val servers = buildList {
+                        addAll(state.gb2cServers.filter { it.url != initialServer?.url })
+                        if (typed != null) add(typed)
+                    }
+                    if (servers.none { it.enabled } && selectedBoards.isEmpty()) {
+                        error = noSourceError
                         return@Button
                     }
                     val accepted = onConnect(
                         SettingsInput(
-                            serverUrl = serverUrl,
-                            connectionMode = if (directMode) {
-                                ConnectionMode.DirectBoards
-                            } else {
-                                ConnectionMode.Server
-                            },
+                            gb2cServers = servers,
+                            selectedBoards = selectedBoards,
                             totozServerUrl = totozServerUrl,
                             nickname = nickname,
-                            selectedTribunes = if (directMode) selectedBoards else emptySet(),
                             blockedIdentities = state.localBlocked.joinToString(","),
                             displayMode = state.displayMode,
                             plopList = state.plopList.joinToString(","),
                         ),
                     )
-                    if (!accepted) {
-                        error = if (directMode) optionalServerError else serverError
-                    }
+                    if (!accepted) error = serverError
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {

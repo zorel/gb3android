@@ -1,6 +1,8 @@
 package org.zorel.gb3android.domain
 
 import org.zorel.gb3android.data.Post
+import org.zorel.gb3android.data.SourceId
+import org.zorel.gb3android.data.TribuneKey
 
 /**
  * Conversation index shared by the post list and the conversation filter.
@@ -43,12 +45,17 @@ object Conversation {
         val parsed = sorted.associate { post ->
             post.key to (parsedByKey[post.key] ?: MessageParser.parse(post.message))
         }
-        val byClock = HashMap<String, HashMap<String, Post>>()
-        val byMinute = HashMap<String, HashMap<String, Post>>()
+        val byClock = HashMap<TribuneKey, HashMap<String, Post>>()
+        val byMinute = HashMap<TribuneKey, HashMap<String, Post>>()
+        val byName = HashMap<String, MutableList<TribuneKey>>()
         for (post in sorted) {
+            val tribune = post.tribuneKey
+            byName.getOrPut(tribune.name) { ArrayList() }.let { names ->
+                if (tribune !in names) names += tribune
+            }
             if (post.clockKey.length == 6) {
-                byClock.getOrPut(post.tribune) { HashMap() }[post.clockKey] = post
-                byMinute.getOrPut(post.tribune) { HashMap() }[post.clockKey.take(4)] = post
+                byClock.getOrPut(tribune) { HashMap() }[post.clockKey] = post
+                byMinute.getOrPut(tribune) { HashMap() }[post.clockKey.take(4)] = post
             }
         }
 
@@ -57,11 +64,28 @@ object Conversation {
         val parentsByChild = HashMap<String, MutableSet<String>>()
         for (post in sorted) {
             val refs = parsed.getValue(post.key).norloges.mapIndexed { index, ref ->
-                val targetTribune = ref.targetTribune ?: post.tribune
-                val target = if (ref.clockKey.length == 6) {
-                    byClock[targetTribune]?.get(ref.clockKey)
+                // A bare `@tribune` prefers the same source as the referring
+                // post, then falls back to the first source that has it, like
+                // roinroin. Without a suffix the reference stays in this board.
+                val targetTribune = if (ref.targetTribune != null) {
+                    val candidates = byName[ref.targetTribune].orEmpty()
+                        .sortedWith(
+                            compareBy(
+                                { if (it.source is SourceId.Gb2c) 0 else 1 },
+                                { it.source.key },
+                                { it.name },
+                            ),
+                        )
+                    candidates.firstOrNull { it.source == post.source } ?: candidates.firstOrNull()
                 } else {
-                    byMinute[targetTribune]?.get(ref.clockKey)
+                    post.tribuneKey
+                }
+                val target = targetTribune?.let { tribune ->
+                    if (ref.clockKey.length == 6) {
+                        byClock[tribune]?.get(ref.clockKey)
+                    } else {
+                        byMinute[tribune]?.get(ref.clockKey)
+                    }
                 }
                 ResolvedRef(index, ref, target?.key)
             }
@@ -136,7 +160,7 @@ object Conversation {
             )
         }
 
-        val maxIdByTribune = sorted.groupBy { it.tribune }.mapValues { (_, posts) ->
+        val maxIdByTribune = sorted.groupBy { it.tribuneKey.key }.mapValues { (_, posts) ->
             posts.maxOf { it.id }
         }
         return Analysis(entries, parsed, maxIdByTribune)

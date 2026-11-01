@@ -36,7 +36,7 @@ class BoardClient(
                     "cannot read ${board.name}: HTTP ${response.code} ${response.message}",
                 )
             }
-            BoardTsv.parse(readBody(response), board.name)
+            BoardTsv.parse(readBody(response), board.name, SourceId.Direct(board.name))
         }
     }
 

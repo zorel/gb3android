@@ -5,12 +5,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -33,7 +30,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,9 +47,9 @@ import org.zorel.gb3android.data.BlockedDisplayMode
 import org.zorel.gb3android.data.Board
 import org.zorel.gb3android.data.BoardAuth
 import org.zorel.gb3android.data.BoardValidationError
-import org.zorel.gb3android.data.ConnectionMode
+import org.zorel.gb3android.data.Gb2cServer
+import org.zorel.gb3android.data.ServerValidationError
 import org.zorel.gb3android.data.TotozServer
-import org.zorel.gb3android.data.csvSet
 import org.zorel.gb3android.ui.SettingsInput
 import org.zorel.gb3android.ui.UiState
 
@@ -71,35 +67,18 @@ fun SettingsScreen(
     onAddBoard: (Board) -> Boolean,
     onRemoveBoard: (String) -> Boolean,
 ) {
-    var serverUrl by rememberSaveable { mutableStateOf(state.serverUrl) }
+    var servers by remember { mutableStateOf(state.gb2cServers) }
+    var selectedBoards by remember { mutableStateOf(state.selectedBoards) }
     var totozServerUrl by rememberSaveable { mutableStateOf(state.totozServerUrl) }
     var nickname by rememberSaveable { mutableStateOf(state.nickname) }
-    var selectedCsv by rememberSaveable { mutableStateOf(state.tribunes.joinToString(",")) }
     var blocked by rememberSaveable { mutableStateOf(state.localBlocked.joinToString(",")) }
     var displayModeName by rememberSaveable { mutableStateOf(state.displayMode.name) }
     var plopList by rememberSaveable { mutableStateOf(state.plopList.joinToString(",")) }
-    var modeName by rememberSaveable { mutableStateOf(state.connectionMode.name) }
     var error by remember { mutableStateOf<String?>(null) }
-    var selectionError by remember { mutableStateOf<String?>(null) }
     var showBoardDialog by remember { mutableStateOf(false) }
+    var showServerDialog by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
-    val directMode = modeName == ConnectionMode.DirectBoards.name
-    val boardNames = state.boards.map { it.name }
     val saveErrorMessage = stringResource(R.string.settings_error_save)
-    val keepOneMessage = stringResource(R.string.settings_keep_one)
-
-    LaunchedEffect(state.tribunes) {
-        selectedCsv = state.tribunes.joinToString(",")
-    }
-
-    val options = if (directMode) {
-        boardNames.sorted()
-    } else if (state.availableTribunes.isNotEmpty()) {
-        state.availableTribunes
-    } else {
-        state.tribunes
-    }
-    val selected = selectedCsv.csvSet()
 
     Scaffold(
         topBar = {
@@ -124,71 +103,65 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item {
-                SettingsSection(stringResource(R.string.settings_connection)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = !directMode,
-                            onClick = {
-                                modeName = ConnectionMode.Server.name
-                                selectedCsv = state.tribunes.joinToString(",")
-                            },
-                            label = { Text(stringResource(R.string.setup_mode_server)) },
-                        )
-                        FilterChip(
-                            selected = directMode,
-                            onClick = {
-                                modeName = ConnectionMode.DirectBoards.name
-                                val current = selectedCsv.csvSet()
-                                if (current.none { it in boardNames }) {
-                                    selectedCsv = boardNames.sorted().joinToString(",")
-                                }
-                            },
-                            label = { Text(stringResource(R.string.setup_mode_direct)) },
+                SettingsSection(stringResource(R.string.settings_gb2c_servers)) {
+                    Text(
+                        text = stringResource(R.string.settings_gb2c_servers_support),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (servers.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.settings_no_gb2c_servers),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    androidx.compose.material3.OutlinedTextField(
-                        value = serverUrl,
-                        onValueChange = { serverUrl = it },
-                        label = {
-                            Text(
-                                stringResource(
-                                    if (directMode) {
-                                        R.string.settings_server_url_optional
-                                    } else {
-                                        R.string.settings_server_url
-                                    },
-                                ),
+                    servers.forEach { server ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Checkbox(
+                                checked = server.enabled,
+                                onCheckedChange = { checked ->
+                                    servers = servers.map {
+                                        if (it.url == server.url) it.copy(enabled = checked) else it
+                                    }
+                                },
                             )
-                        },
-                        placeholder = { Text("https://gb3.example.com") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                        modifier = Modifier.fillMaxWidth(),
-                        supportingText = {
-                            Text(
-                                stringResource(
-                                    if (directMode) {
-                                        R.string.settings_server_direct_support
-                                    } else {
-                                        R.string.settings_server_support
-                                    },
-                                ),
-                            )
-                        },
-                    )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = server.name,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                )
+                                Text(
+                                    text = server.url,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            TextButton(
+                                onClick = {
+                                    servers = servers.filterNot { it.url == server.url }
+                                },
+                            ) {
+                                Text(stringResource(R.string.settings_remove))
+                            }
+                        }
+                    }
+                    OutlinedButton(onClick = { showServerDialog = true }) {
+                        Text(stringResource(R.string.settings_add_gb2c_server))
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = {
                             val ok = onSave(
                                 SettingsInput(
-                                    serverUrl = serverUrl,
-                                    connectionMode = if (directMode) {
-                                        ConnectionMode.DirectBoards
-                                    } else {
-                                        ConnectionMode.Server
-                                    },
+                                    gb2cServers = servers,
+                                    selectedBoards = selectedBoards,
                                     totozServerUrl = totozServerUrl,
                                     nickname = nickname,
-                                    selectedTribunes = selected,
                                     blockedIdentities = blocked,
                                     displayMode = displayModeName.toBlockedDisplayMode(),
                                     plopList = plopList,
@@ -199,15 +172,7 @@ fun SettingsScreen(
                             Text(stringResource(R.string.settings_save))
                         }
                         OutlinedButton(onClick = onRefresh) {
-                            Text(
-                                stringResource(
-                                    if (directMode) {
-                                        R.string.settings_refresh_boards
-                                    } else {
-                                        R.string.settings_refresh_tribunes
-                                    },
-                                ),
-                            )
+                            Text(stringResource(R.string.settings_refresh_tribunes))
                         }
                     }
                     error?.let {
@@ -287,72 +252,6 @@ fun SettingsScreen(
             }
 
             item {
-                SettingsSection(stringResource(R.string.settings_tribunes)) {
-                    if (options.isEmpty()) {
-                        Text(
-                            text = stringResource(
-                                if (directMode) {
-                                    R.string.settings_no_boards
-                                } else {
-                                    R.string.settings_no_tribunes
-                                },
-                            ),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    } else {
-                        Text(
-                            text = stringResource(
-                                if (directMode) {
-                                    R.string.settings_selected_boards
-                                } else {
-                                    R.string.settings_selected_tribunes
-                                },
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        options.forEach { tribune ->
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 1.dp),
-                            ) {
-                                Checkbox(
-                                    checked = tribune in selected,
-                                    onCheckedChange = { checked ->
-                                        val current = selectedCsv.csvSet()
-                                        val next = if (checked) current + tribune else current - tribune
-                                        if (next.isEmpty()) {
-                                            selectionError = keepOneMessage
-                                        } else {
-                                            selectionError = null
-                                            selectedCsv = next.joinToString(",")
-                                        }
-                                    },
-                                )
-                                Text(
-                                    text = tribune,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .padding(start = 4.dp),
-                                )
-                            }
-                        }
-                        selectionError?.let {
-                            Text(
-                                text = it,
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                    }
-                }
-            }
-
-            item {
                 SettingsSection(stringResource(R.string.settings_boards)) {
                     Text(
                         text = stringResource(R.string.settings_boards_support),
@@ -364,6 +263,16 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
+                            Checkbox(
+                                checked = board.name in selectedBoards,
+                                onCheckedChange = { checked ->
+                                    selectedBoards = if (checked) {
+                                        selectedBoards + board.name
+                                    } else {
+                                        selectedBoards - board.name
+                                    }
+                                },
+                            )
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = board.name,
@@ -378,7 +287,13 @@ fun SettingsScreen(
                                 )
                             }
                             if (!board.predefined) {
-                                TextButton(onClick = { onRemoveBoard(board.name) }) {
+                                TextButton(
+                                    onClick = {
+                                        if (onRemoveBoard(board.name)) {
+                                            selectedBoards = selectedBoards - board.name
+                                        }
+                                    },
+                                ) {
                                     Text(stringResource(R.string.settings_remove))
                                 }
                             } else {
@@ -485,15 +400,10 @@ fun SettingsScreen(
                     onClick = {
                         val ok = onSave(
                             SettingsInput(
-                                serverUrl = serverUrl,
-                                connectionMode = if (directMode) {
-                                    ConnectionMode.DirectBoards
-                                } else {
-                                    ConnectionMode.Server
-                                },
+                                gb2cServers = servers,
+                                selectedBoards = selectedBoards,
                                 totozServerUrl = totozServerUrl,
                                 nickname = nickname,
-                                selectedTribunes = selected,
                                 blockedIdentities = blocked,
                                 displayMode = displayModeName.toBlockedDisplayMode(),
                                 plopList = plopList,
@@ -509,16 +419,106 @@ fun SettingsScreen(
         }
     }
 
+    if (showServerDialog) {
+        AddServerDialog(
+            existingUrls = servers.mapTo(HashSet()) { it.url },
+            onDismiss = { showServerDialog = false },
+            onAdd = { server ->
+                servers = servers + server
+                showServerDialog = false
+                true
+            },
+        )
+    }
+
     if (showBoardDialog) {
         AddBoardDialog(
             onDismiss = { showBoardDialog = false },
             onAdd = { board ->
                 val added = onAddBoard(board)
-                if (added) showBoardDialog = false
+                if (added) {
+                    selectedBoards = selectedBoards + board.name
+                    showBoardDialog = false
+                }
                 added
             },
         )
     }
+}
+
+@Composable
+private fun AddServerDialog(
+    existingUrls: Set<String>,
+    onDismiss: () -> Unit,
+    onAdd: (Gb2cServer) -> Boolean,
+) {
+    var name by remember { mutableStateOf("") }
+    var url by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    val validationMessages = mapOf(
+        ServerValidationError.NameRequired to stringResource(R.string.settings_server_error_name_required),
+        ServerValidationError.NameTooLong to stringResource(R.string.settings_server_error_name_too_long),
+        ServerValidationError.NameInvalid to stringResource(R.string.settings_server_error_name_invalid),
+        ServerValidationError.Url to stringResource(R.string.settings_server_error_url),
+    )
+    val duplicateMessage = stringResource(R.string.settings_server_duplicate)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_add_gb2c_server)) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(stringResource(R.string.settings_server_name)) },
+                    placeholder = { Text(stringResource(R.string.settings_server_name_placeholder)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = { url = it },
+                    label = { Text(stringResource(R.string.settings_server_url)) },
+                    placeholder = { Text("https://gb3.example.com") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                error?.let {
+                    Text(
+                        text = it,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val server = Gb2cServer(name, url, enabled = true).normalized()
+                    val validation = server.validationError()
+                    when {
+                        validation != null -> error = validationMessages.getValue(validation)
+                        server.url in existingUrls -> error = duplicateMessage
+                        onAdd(server) -> error = null
+                        else -> error = duplicateMessage
+                    }
+                },
+            ) {
+                Text(stringResource(R.string.action_add))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        },
+    )
 }
 
 @Composable

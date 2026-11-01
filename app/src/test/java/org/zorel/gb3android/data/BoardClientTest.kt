@@ -28,6 +28,7 @@ class BoardClientTest {
             val posts = BoardClient().fetch(board)
             assertEquals(listOf(1L, 2L), posts.map { it.id })
             assertEquals("custom", posts.first().tribune)
+            assertEquals(SourceId.Direct("custom"), posts.first().source)
             assertEquals("alice", posts.first().login)
         } finally {
             server.shutdown()

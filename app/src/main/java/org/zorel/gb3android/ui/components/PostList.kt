@@ -64,6 +64,7 @@ fun PostList(
     modifier: Modifier = Modifier,
 ) {
     val posts = state.displayPosts
+    val boardsOnly = state.gb2cServers.none { it.enabled }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
@@ -128,7 +129,7 @@ fun PostList(
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(30.dp))
                     Text(
-                        text = if (state.directBoards) {
+                        text = if (boardsOnly) {
                             stringResource(R.string.posts_refreshing_boards)
                         } else {
                             stringResource(R.string.posts_connecting_to, state.serverUrl)
@@ -152,14 +153,14 @@ fun PostList(
                         text = if (state.activeTribune == null) {
                             stringResource(R.string.posts_none_selected)
                         } else {
-                            stringResource(R.string.posts_no_post_in, state.activeTribune)
+                            stringResource(R.string.posts_no_post_in, state.activeName.orEmpty())
                         },
                         style = MaterialTheme.typography.titleMedium,
                         textAlign = TextAlign.Center,
                     )
                     Text(
                         text = if (state.tribunes.isEmpty()) {
-                            if (state.directBoards) {
+                            if (boardsOnly) {
                                 stringResource(R.string.posts_empty_direct_hint)
                             } else {
                                 stringResource(R.string.posts_empty_server_hint)

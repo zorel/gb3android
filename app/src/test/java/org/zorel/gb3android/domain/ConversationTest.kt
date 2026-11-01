@@ -1,6 +1,7 @@
 package org.zorel.gb3android.domain
 
 import org.zorel.gb3android.data.Post
+import org.zorel.gb3android.data.SourceId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -14,7 +15,14 @@ class ConversationTest {
         info: String = "dave",
         login: String = "",
         message: String,
-    ) = Post(id, time, info, login, message, tribune)
+        source: SourceId = SourceId.Direct(tribune),
+    ) = Post(id, time, info, login, message, tribune, source)
+
+    private fun key(
+        id: Long,
+        tribune: String = "trib",
+        source: SourceId = SourceId.Direct(tribune),
+    ) = Post.keyOf(source, tribune, id)
 
     @Test
     fun hidesDirectlyBlockedPostsAndTheirDescendants() {
@@ -30,10 +38,10 @@ class ConversationTest {
             blockedIdentities = setOf("alice"),
             myIdentities = setOf("dave"),
         )
-        assertTrue(analysis.posts.getValue("trib:1").hidden)
-        assertTrue(analysis.posts.getValue("trib:2").hidden)
-        assertTrue(analysis.posts.getValue("trib:3").hidden)
-        assertFalse(analysis.posts.getValue("trib:4").hidden)
+        assertTrue(analysis.posts.getValue(key(1)).hidden)
+        assertTrue(analysis.posts.getValue(key(2)).hidden)
+        assertTrue(analysis.posts.getValue(key(3)).hidden)
+        assertFalse(analysis.posts.getValue(key(4)).hidden)
     }
 
     @Test
@@ -49,9 +57,9 @@ class ConversationTest {
             blockedIdentities = emptySet(),
             myIdentities = setOf("dave"),
         )
-        val targets = analysis.posts.getValue("trib:3").refs.map { it.targetKey }
-        assertEquals(listOf("trib:2"), targets)
-        assertTrue(analysis.posts.getValue("trib:2").children.contains("trib:3"))
+        val targets = analysis.posts.getValue(key(3)).refs.map { it.targetKey }
+        assertEquals(listOf(key(2)), targets)
+        assertTrue(analysis.posts.getValue(key(2)).children.contains(key(3)))
     }
 
     @Test
@@ -66,8 +74,8 @@ class ConversationTest {
             blockedIdentities = emptySet(),
             myIdentities = setOf("me"),
         )
-        assertTrue(analysis.posts.getValue("trib:1").isMine)
-        assertTrue(analysis.posts.getValue("trib:2").isReply)
+        assertTrue(analysis.posts.getValue(key(1)).isMine)
+        assertTrue(analysis.posts.getValue(key(2)).isReply)
     }
 
     @Test
@@ -81,7 +89,7 @@ class ConversationTest {
             blockedIdentities = emptySet(),
             myIdentities = setOf("dave"),
         )
-        assertTrue(analysis.posts.getValue("trib:1").isBigorno)
+        assertTrue(analysis.posts.getValue(key(1)).isBigorno)
     }
 
     @Test
@@ -96,7 +104,7 @@ class ConversationTest {
             blockedIdentities = emptySet(),
             myIdentities = setOf("dave"),
         )
-        assertEquals("other:1", analysis.posts.getValue("trib:2").refs.single().targetKey)
+        assertEquals(key(1, "other"), analysis.posts.getValue(key(2)).refs.single().targetKey)
     }
 
     @Test
@@ -111,7 +119,7 @@ class ConversationTest {
             blockedIdentities = emptySet(),
             myIdentities = setOf("dave"),
         )
-        assertEquals("trib:1", analysis.posts.getValue("trib:2").refs.single().targetKey)
+        assertEquals(key(1), analysis.posts.getValue(key(2)).refs.single().targetKey)
     }
 
     @Test
@@ -127,8 +135,58 @@ class ConversationTest {
             blockedIdentities = emptySet(),
             myIdentities = setOf("dave"),
         )
-        val reply = analysis.posts.getValue("trib:2")
-        assertEquals("trib:1", reply.rootKey)
-        assertTrue(Conversation.colorIndex("trib:1") in 0 until Conversation.CONVERSATION_COLORS)
+        val reply = analysis.posts.getValue(key(2))
+        assertEquals(key(1), reply.rootKey)
+        assertTrue(Conversation.colorIndex(key(1)) in 0 until Conversation.CONVERSATION_COLORS)
+    }
+
+    @Test
+    fun keepsTheSameTribuneNameSeparatePerSource() {
+        val gb2c = SourceId.Gb2c("https://gb2c.example")
+        val posts = listOf(
+            post(1, "2026-10-26T10:00:00", message = "direct root"),
+            post(2, "2026-10-26T10:00:00", message = "gb2c root", source = gb2c),
+            post(3, "2026-10-26T10:00:05", message = "reply 10:00:00", source = gb2c),
+        )
+        val analysis = Conversation.analyze(
+            posts = posts,
+            parsedByKey = emptyMap(),
+            blockedIdentities = emptySet(),
+            myIdentities = setOf("dave"),
+        )
+        val reply = analysis.posts.getValue(key(3, source = gb2c))
+        assertEquals(key(2, source = gb2c), reply.refs.single().targetKey)
+        assertFalse(analysis.posts.getValue(key(1)).children.contains(key(3, source = gb2c)))
+    }
+
+    @Test
+    fun crossTribuneReferencesPreferTheSameSource() {
+        val gb2c = SourceId.Gb2c("https://gb2c.example")
+        val posts = listOf(
+            post(1, "2026-10-26T10:00:00", tribune = "other", message = "direct other"),
+            post(
+                2,
+                "2026-10-26T10:00:00",
+                tribune = "other",
+                message = "gb2c other",
+                source = gb2c,
+            ),
+            post(
+                3,
+                "2026-10-26T10:00:05",
+                message = "reply 10:00:00@other",
+                source = gb2c,
+            ),
+        )
+        val analysis = Conversation.analyze(
+            posts = posts,
+            parsedByKey = emptyMap(),
+            blockedIdentities = emptySet(),
+            myIdentities = setOf("dave"),
+        )
+        assertEquals(
+            key(2, "other", gb2c),
+            analysis.posts.getValue(key(3, source = gb2c)).refs.single().targetKey,
+        )
     }
 }

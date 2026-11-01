@@ -9,12 +9,13 @@
     <string name="setup_server_url">URL du serveur gb2c</string>
     <string name="setup_server_url_optional">URL du serveur gb2c (facultative)</string>
     <string name="setup_server_support">http:// est accepté pour les serveurs auto-hébergés sur un réseau local.</string>
-    <string name="setup_server_optional_support">Utilisée uniquement pour les totoz, les emoji, les pièces jointes et la connexion LinuxFR. Les messages sont publiés directement dans les tribunes sélectionnées.</string>
+    <string name="setup_server_optional_support">Facultative. Un serveur gb2c fournit ses tribunes en direct ; les tribunes sélectionnées sont lues directement. Les deux peuvent fonctionner en même temps ; le premier serveur gb2c sert aussi pour les totoz, les emoji, les pièces jointes et la connexion LinuxFR.</string>
     <string name="setup_nickname">Pseudo (facultatif)</string>
     <string name="setup_nickname_support">C’est l’info envoyée avec vos messages.</string>
     <string name="setup_boards">Tribunes</string>
-    <string name="setup_boards_support">Les tribunes sélectionnées sont lues et publiées directement.</string>
+    <string name="setup_boards_support">Les tribunes cochées sont ajoutées en direct à côté du serveur gb2c.</string>
     <string name="setup_error_select_board">Sélectionnez au moins une tribune.</string>
+    <string name="setup_error_no_source">Saisissez une URL de serveur gb2c ou sélectionnez au moins une tribune.</string>
     <string name="setup_error_optional_server">Vérifiez l’URL facultative du serveur.</string>
     <string name="setup_error_server">Saisissez une URL de serveur http(s) valide.</string>
     <string name="setup_connect">Se connecter</string>
@@ -28,6 +29,8 @@
     <string name="main_stream_description">Flux %1$s</string>
     <string name="main_clock_description">Horloge %1$s</string>
     <string name="main_totoz_description">Totoz %1$s</string>
+    <string name="source_gb2c">gb2c · %1$s</string>
+    <string name="source_board">board direct</string>
     <string name="snackbar_cannot_open_link">Impossible d’ouvrir ce lien</string>
     <string name="snackbar_unsupported_link">Lien non pris en charge : %1$s</string>
 
@@ -94,6 +97,19 @@
     <string name="settings_title">Réglages</string>
     <string name="action_back">Retour</string>
     <string name="settings_connection">Connexion</string>
+    <string name="settings_gb2c_servers">Serveurs gb2c</string>
+    <string name="settings_gb2c_servers_support">Les serveurs activés fournissent leurs tribunes via /gb2c/poll. Le premier serveur activé sert aussi pour les emoji, les pièces jointes et la connexion LinuxFR. Les tribunes de chaque serveur activé apparaissent à côté des tribunes directes.</string>
+    <string name="settings_no_gb2c_servers">Aucun serveur gb2c configuré pour le moment.</string>
+    <string name="settings_add_gb2c_server">Ajouter un serveur gb2c</string>
+    <string name="settings_server_name">Nom du serveur</string>
+    <string name="settings_server_name_placeholder">local</string>
+    <string name="settings_server_error_name_required">Saisissez un nom de serveur.</string>
+    <string name="settings_server_error_name_too_long">Le nom du serveur est trop long.</string>
+    <string name="settings_server_error_name_invalid">Le nom du serveur contient des caractères invalides.</string>
+    <string name="settings_server_error_url">Saisissez une URL http(s) valide.</string>
+    <string name="settings_server_duplicate">Ce serveur est déjà configuré.</string>
+    <string name="error_duplicate_server">Ce serveur gb2c est déjà configuré.</string>
+    <string name="error_no_source">Activez un serveur gb2c ou sélectionnez au moins une tribune directe.</string>
     <string name="settings_server_url">URL gb2c</string>
     <string name="settings_server_url_optional">URL gb2c (facultative, pour totoz/emoji/LinuxFR)</string>
     <string name="settings_server_direct_support">Les tribunes sont lues et publiées directement ; le serveur ne sert qu’aux services auxiliaires.</string>
@@ -122,7 +138,7 @@
     <string name="settings_selected_tribunes">Les tribunes sélectionnées sont diffusées en direct. Gardez-en au moins une.</string>
     <string name="settings_keep_one">Gardez au moins une tribune sélectionnée.</string>
     <string name="settings_boards">Tribunes</string>
-    <string name="settings_boards_support">Les tribunes intégrées reprennent la liste par défaut de gb2c. Les tribunes personnalisées sont lues et publiées directement, sans gb2c.</string>
+    <string name="settings_boards_support">Les tribunes cochées sont ajoutées en direct à côté des serveurs gb2c. Les tribunes intégrées reprennent la liste par défaut de gb2c ; les tribunes personnalisées sont lues et publiées directement.</string>
     <string name="settings_remove">Supprimer</string>
     <string name="settings_builtin">intégrée</string>
     <string name="settings_add_board">Ajouter une tribune personnalisée</string>

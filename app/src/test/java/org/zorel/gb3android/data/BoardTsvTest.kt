@@ -20,12 +20,13 @@ class BoardTsvTest {
             "4\t$time\t\t\t\n" +
             "5\t$time\tinfo\t\tmessage five\n"
 
-        val posts = BoardTsv.parse(backend, "moules")
+        val posts = BoardTsv.parse(backend, "moules", SourceId.Direct("moules"))
 
         assertEquals(listOf(1L, 2L, 5L), posts.map { it.id })
         assertEquals("message one", posts[0].message)
         assertEquals("login", posts[1].login)
         assertEquals("moules", posts[0].tribune)
+        assertEquals(SourceId.Direct("moules"), posts[0].source)
         assertEquals("20260926120000", posts[0].time)
     }
 
@@ -34,7 +35,7 @@ class BoardTsvTest {
         val backend = "7\t$time\tinfo\tlogin\tmessage\twith\ttabs\r\n" +
             "8\t$time\tinfo\t\tsecond\r\n"
 
-        val posts = BoardTsv.parse(backend, "trib")
+        val posts = BoardTsv.parse(backend, "trib", SourceId.Direct("trib"))
 
         assertEquals(listOf(7L, 8L), posts.map { it.id })
         assertEquals("message", posts[0].message)
@@ -43,9 +44,14 @@ class BoardTsvTest {
 
     @Test
     fun rejectsHtmlAndEmptyBodies() {
-        assertTrue(BoardTsv.parse("<html><body>bad gateway</body></html>", "trib").isEmpty())
-        assertTrue(BoardTsv.parse("", "trib").isEmpty())
-        assertTrue(BoardTsv.parse("1\t$time\tinfo\t\tmessage", " ").isEmpty())
+        assertTrue(
+            BoardTsv.parse("<html><body>bad gateway</body></html>", "trib", SourceId.Direct("trib"))
+                .isEmpty(),
+        )
+        assertTrue(BoardTsv.parse("", "trib", SourceId.Direct("trib")).isEmpty())
+        assertTrue(
+            BoardTsv.parse("1\t$time\tinfo\t\tmessage", " ", SourceId.Direct("trib")).isEmpty(),
+        )
     }
 
     @Test
@@ -54,7 +60,7 @@ class BoardTsvTest {
         val backend = "9\t$time\tinfo\tlogin\tbad\u0000message\n" +
             "10\t$time\tinfo\t\t$huge\n"
 
-        val posts = BoardTsv.parse(backend, "trib")
+        val posts = BoardTsv.parse(backend, "trib", SourceId.Direct("trib"))
 
         assertEquals("badmessage", posts[0].message)
         assertEquals(BoardTsv.MAX_MESSAGE_LENGTH, posts[1].message.length)
@@ -64,7 +70,7 @@ class BoardTsvTest {
     fun keepsTheLatestIdsWhenCapped() {
         val backend = (1..5).joinToString("\n") { "$it\t$time\tinfo\t\tmessage $it" }
 
-        val posts = BoardTsv.parse(backend, "trib", maxPosts = 2)
+        val posts = BoardTsv.parse(backend, "trib", SourceId.Direct("trib"), maxPosts = 2)
 
         assertEquals(listOf(4L, 5L), posts.map { it.id })
     }

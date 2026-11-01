@@ -9,12 +9,13 @@
     <string name="setup_server_url">gb2c server URL</string>
     <string name="setup_server_url_optional">gb2c server URL (optional)</string>
     <string name="setup_server_support">Plain http:// is supported for self-hosted servers on a LAN.</string>
-    <string name="setup_server_optional_support">Only used for totoz, emoji, attachments and LinuxFR login. Posts are sent straight to the selected boards.</string>
+    <string name="setup_server_optional_support">Optional. A gb2c server provides its tribunes live; selected boards are read directly. Both can be used at the same time; the first gb2c server also handles totoz, emoji, attachments and LinuxFR login.</string>
     <string name="setup_nickname">Nickname (optional)</string>
     <string name="setup_nickname_support">This is the info sent with your posts.</string>
     <string name="setup_boards">Boards</string>
-    <string name="setup_boards_support">Selected boards are downloaded and posted to directly.</string>
+    <string name="setup_boards_support">Checked boards are added as direct tribunes alongside the gb2c server.</string>
     <string name="setup_error_select_board">Select at least one board.</string>
+    <string name="setup_error_no_source">Enter a gb2c server URL or select at least one board.</string>
     <string name="setup_error_optional_server">Check the optional server URL.</string>
     <string name="setup_error_server">Please enter a valid http(s) server URL.</string>
     <string name="setup_connect">Connect</string>
@@ -28,6 +29,8 @@
     <string name="main_stream_description">Stream %1$s</string>
     <string name="main_clock_description">Clock %1$s</string>
     <string name="main_totoz_description">Totoz %1$s</string>
+    <string name="source_gb2c">gb2c · %1$s</string>
+    <string name="source_board">board direct</string>
     <string name="snackbar_cannot_open_link">Cannot open this link</string>
     <string name="snackbar_unsupported_link">Unsupported link: %1$s</string>
 
@@ -94,6 +97,19 @@
     <string name="settings_title">Settings</string>
     <string name="action_back">Back</string>
     <string name="settings_connection">Connection</string>
+    <string name="settings_gb2c_servers">gb2c servers</string>
+    <string name="settings_gb2c_servers_support">Enabled servers provide tribunes through /gb2c/poll. The first enabled server also handles emoji, attachments and LinuxFR login. Tribunes from every enabled server appear alongside direct boards.</string>
+    <string name="settings_no_gb2c_servers">No gb2c server configured yet.</string>
+    <string name="settings_add_gb2c_server">Add gb2c server</string>
+    <string name="settings_server_name">Server name</string>
+    <string name="settings_server_name_placeholder">local</string>
+    <string name="settings_server_error_name_required">Enter a server name.</string>
+    <string name="settings_server_error_name_too_long">Server name is too long.</string>
+    <string name="settings_server_error_name_invalid">Server name contains invalid characters.</string>
+    <string name="settings_server_error_url">Enter a valid http(s) URL.</string>
+    <string name="settings_server_duplicate">This server is already configured.</string>
+    <string name="error_duplicate_server">This gb2c server is already configured.</string>
+    <string name="error_no_source">Enable a gb2c server or select at least one direct board.</string>
     <string name="settings_server_url">gb2c URL</string>
     <string name="settings_server_url_optional">gb2c URL (optional, for totoz/emoji/LinuxFR)</string>
     <string name="settings_server_direct_support">Boards are fetched and posted to directly; the server is only used for auxiliary services.</string>
@@ -122,7 +138,7 @@
     <string name="settings_selected_tribunes">Selected tribunes are streamed live. Keep at least one.</string>
     <string name="settings_keep_one">Keep at least one tribune selected.</string>
     <string name="settings_boards">Boards</string>
-    <string name="settings_boards_support">Built-in boards mirror gb2c\'s default list. Custom boards are read and posted to directly, without gb2c.</string>
+    <string name="settings_boards_support">Checked boards are added as direct tribunes alongside the gb2c servers. Built-in boards mirror gb2c\'s default list; custom boards are read and posted to directly.</string>
     <string name="settings_remove">Remove</string>
     <string name="settings_builtin">built-in</string>
     <string name="settings_add_board">Add custom board</string>

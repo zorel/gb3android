@@ -206,7 +206,7 @@ fun Composer(
                                     Text(
                                         text = stringResource(
                                             R.string.composer_message_to,
-                                            state.activeTribune ?: "…",
+                                            state.activeName ?: "…",
                                         ),
                                         style = MaterialTheme.typography.bodyLarge,
                                         color = palette.muted,

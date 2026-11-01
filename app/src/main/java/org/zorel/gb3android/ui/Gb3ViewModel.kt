@@ -11,8 +11,8 @@ import org.zorel.gb3android.data.Board
 import org.zorel.gb3android.data.BoardClient
 import org.zorel.gb3android.data.BoardCodec
 import org.zorel.gb3android.data.BoardValidationError
-import org.zorel.gb3android.data.ConnectionMode
 import org.zorel.gb3android.data.EmojiItem
+import org.zorel.gb3android.data.Gb2cServer
 import org.zorel.gb3android.data.Gb3Api
 import org.zorel.gb3android.data.LinuxfrSession
 import org.zorel.gb3android.data.PollEvent
@@ -20,10 +20,13 @@ import org.zorel.gb3android.data.Post
 import org.zorel.gb3android.data.Preferences
 import org.zorel.gb3android.data.PredefinedBoards
 import org.zorel.gb3android.data.Screen
+import org.zorel.gb3android.data.SourceId
+import org.zorel.gb3android.data.SourceStatus
 import org.zorel.gb3android.data.TextDraft
 import org.zorel.gb3android.data.Totoz
 import org.zorel.gb3android.data.TotozServer
 import org.zorel.gb3android.data.TribuneBadge
+import org.zorel.gb3android.data.TribuneKey
 import org.zorel.gb3android.data.csvSet
 import org.zorel.gb3android.data.randomNickname
 import org.zorel.gb3android.domain.Conversation
@@ -32,6 +35,8 @@ import org.zorel.gb3android.domain.MessageToken
 import org.zorel.gb3android.domain.ParsedMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -81,13 +86,15 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
     private var serverBlocked: Set<String> = emptySet()
     private var foreground = false
     private var bootstrapJob: Job? = null
-    private var pollJob: Job? = null
-    private var boardPollJob: Job? = null
+    private val gb2cPollJobs = HashMap<String, Job>()
+    private val boardPollJobs = HashMap<String, Job>()
     private var recomputeJob: Job? = null
-    private var pollSignature: String? = null
-    private var boardPollSignature: String? = null
-    private val boardStatus = HashMap<String, Boolean>()
+    private val gb2cStatus = HashMap<String, SourceStatus>()
+    private val boardStatus = HashMap<String, SourceStatus>()
+    private val serverBlockedById = HashMap<String, Set<String>>()
+    private val reportedGb2cFailures = HashSet<String>()
     private val reportedBoardFailures = HashSet<String>()
+    private val knownTribunes = HashMap<String, List<String>>()
 
     /** Message recovered after an interrupted LinuxFR OAuth flow. */
     private var pendingDraftOnStart: String? = prefs.pendingLinuxfrMessage
@@ -102,132 +109,120 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
             prefs.pendingLinuxfrMessage = null
             prefs.draft = draftText
         }
-        val mode = prefs.connectionMode
         val boards = PredefinedBoards.merge(BoardCodec.decode(prefs.customBoardsJson))
         val boardNames = boards.mapTo(HashSet()) { it.name }
-        val stored = prefs.selectedTribunesCsv.csvSet()
-        val directSelected = if (mode == ConnectionMode.DirectBoards) {
-            stored.filter { it in boardNames }.sorted()
-        } else {
-            emptyList()
-        }
-        val setupRequired = when (mode) {
-            ConnectionMode.Server -> prefs.serverUrl.isBlank()
-            ConnectionMode.DirectBoards -> directSelected.isEmpty()
-        }
+        val servers = prefs.loadGb2cServers()
+        val selectedBoards = prefs.loadSelectedBoards(boardNames)
+        knownTribunes.putAll(prefs.loadKnownTribunes())
+        val tribunes = buildTribunes(servers, selectedBoards, boards)
+        val storedActive = prefs.activeTribuneKey?.let(TribuneKey::fromKey)
+        val active = storedActive?.takeIf { candidate ->
+            tribunes.any { it.key == candidate.key }
+        } ?: tribunes.firstOrNull()
+        val hasSource = servers.any { it.enabled } || selectedBoards.isNotEmpty()
         _state.value = UiState(
-            serverUrl = prefs.serverUrl,
-            connectionMode = mode,
+            serverUrl = servers.firstOrNull { it.enabled }?.url ?: prefs.serverUrl,
+            gb2cServers = servers,
             boards = boards,
+            selectedBoards = selectedBoards,
             totozServerUrl = prefs.totozServerUrl,
             nickname = nickname,
-            availableTribunes = if (mode == ConnectionMode.DirectBoards) {
-                boardNames.sorted()
-            } else {
-                emptyList()
-            },
-            tribunes = directSelected,
-            activeTribune = directSelected.firstOrNull(),
+            tribunes = tribunes,
+            activeTribune = active,
             localBlocked = prefs.localBlockedIdentitiesCsv.csvSet(),
             displayMode = prefs.blockedDisplayMode,
             plopList = prefs.plopListCsv.csvSet(),
             draft = TextDraft(draftText, draftText.length, draftText.length),
             linuxfr = prefs.linuxfrSession,
             lastPosted = prefs.lastPostedMessage.ifBlank { null },
-            setupRequired = setupRequired,
-            initializing = !setupRequired,
+            setupRequired = !hasSource,
+            initializing = hasSource,
         )
-        if (!setupRequired) bootstrap()
+        prefs.activeTribuneKey = active?.key
+        if (hasSource) bootstrap()
     }
 
     fun onForeground() {
         foreground = true
         val current = _state.value
         if (current.setupRequired) return
-        if (current.directBoards) {
-            if (bootstrapJob?.isActive == true || boardPollJob?.isActive == true) return
-            if (current.tribunes.isEmpty()) {
-                bootstrap()
-            } else {
-                startBoardPolling(current.tribunes)
-            }
-            return
-        }
-        if (current.serverUrl.isBlank()) return
-        if (bootstrapJob?.isActive == true || pollJob?.isActive == true) return
+        if (bootstrapJob?.isActive == true) return
         if (current.tribunes.isEmpty()) {
             bootstrap()
         } else {
-            startPolling(current.serverUrl, current.tribunes)
+            syncPolling()
         }
     }
 
     fun onBackground() {
         foreground = false
-        stopPolling()
-        stopBoardPolling()
+        stopAllPolling()
     }
 
     fun reconnect() {
         val current = _state.value
-        if (current.directBoards) {
-            if (current.tribunes.isEmpty()) {
-                emit(tr(R.string.error_no_board_selected), isError = true)
-                return
-            }
-            if (!foreground) {
-                emit(tr(R.string.error_reconnect_board_background), isError = true)
-                return
-            }
-            emit(tr(R.string.msg_refreshing_boards))
-            startBoardPolling(current.tribunes, force = true)
+        if (current.tribunes.isEmpty()) {
+            emit(tr(R.string.error_no_tribune_server), isError = true)
             return
         }
-        if (current.serverUrl.isBlank()) return
         if (!foreground) {
             emit(tr(R.string.error_reconnect_stream_background), isError = true)
             return
         }
         if (bootstrapJob?.isActive == true) return
-        if (current.tribunes.isEmpty()) {
-            bootstrap()
-        } else {
-            emit(tr(R.string.msg_reconnecting))
-            startPolling(current.serverUrl, current.tribunes, force = true)
+        emit(tr(R.string.msg_reconnecting))
+        syncPolling(force = true)
+    }
+
+    private fun buildTribunes(
+        servers: List<Gb2cServer>,
+        selectedBoards: Set<String>,
+        boards: List<Board>,
+    ): List<TribuneKey> {
+        val result = ArrayList<TribuneKey>()
+        for (server in servers) {
+            if (!server.enabled) continue
+            for (name in knownTribunes[server.url].orEmpty().sorted()) {
+                result += TribuneKey(SourceId.Gb2c(server.url), name)
+            }
         }
+        val boardNames = boards.mapTo(HashSet()) { it.name }
+        for (name in selectedBoards.filter { it in boardNames }.sorted()) {
+            result += TribuneKey(SourceId.Direct(name), name)
+        }
+        return result
+    }
+
+    private fun chooseActiveTribune(
+        current: TribuneKey?,
+        tribunes: List<TribuneKey>,
+        pendingDraft: String?,
+    ): TribuneKey? {
+        if (pendingDraft != null) {
+            tribunes.firstOrNull { it.name == "dlfp" }?.let { return it }
+        }
+        return current?.takeIf { candidate -> tribunes.any { it.key == candidate.key } }
+            ?: tribunes.firstOrNull()
     }
 
     private fun bootstrap(clearPosts: Boolean = false) {
         bootstrapJob?.cancel()
-        stopPolling()
-        stopBoardPolling()
+        stopAllPolling()
         if (clearPosts) {
             allPosts.clear()
             parsedCache.clear()
             plopOverrides.clear()
             selectedKey = null
         }
-        when (_state.value.connectionMode) {
-            ConnectionMode.DirectBoards -> bootstrapDirect()
-            ConnectionMode.Server -> bootstrapServer(clearPosts)
-        }
-    }
-
-    /**
-     * Direct-board mode has no server to discover tribunes from: the available
-     * list comes from the built-in definitions and the user's custom boards.
-     */
-    private fun bootstrapDirect() {
-        val available = _state.value.boards.map { it.name }.sorted()
-        val stored = prefs.selectedTribunesCsv.csvSet()
-        val selected = available.filter { it in stored }
-        if (selected.isEmpty()) {
+        val current = _state.value
+        val enabledServers = current.gb2cServers.filter { it.enabled }
+        val selectedBoards = current.selectedBoards
+        if (enabledServers.isEmpty() && selectedBoards.isEmpty()) {
             _state.update {
                 it.copy(
                     initializing = false,
                     connecting = false,
                     connected = false,
-                    availableTribunes = available,
                     tribunes = emptyList(),
                     activeTribune = null,
                     serverBlocked = emptySet(),
@@ -238,248 +233,228 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             recomputeNow()
-            emit(tr(R.string.error_select_board), isError = true)
             return
         }
 
-        prefs.selectedTribunesCsv = selected.joinToString(",")
-        val currentActive = _state.value.activeTribune
-        val active = when {
-            pendingDraftOnStart != null && "dlfp" in selected -> "dlfp"
-            else -> currentActive?.takeIf { it in selected } ?: selected.first()
-        }
-        pendingDraftOnStart = null
-        selectedKey = null
-        serverBlocked = emptySet()
-        _state.update {
-            it.copy(
-                initializing = false,
-                connecting = foreground,
-                connected = false,
-                availableTribunes = available,
-                tribunes = selected,
-                activeTribune = active,
-                serverBlocked = emptySet(),
-                selectedKey = null,
-                setupRequired = false,
-            )
-        }
-        recomputeNow()
-        if (foreground) {
-            startBoardPolling(selected)
-        } else {
-            _state.update { it.copy(connecting = false) }
-        }
-    }
-
-    private fun bootstrapServer(clearPosts: Boolean) {
-        val normalized = Gb3Api.normalizeServerUrl(_state.value.serverUrl)
-        if (normalized == null) {
-            _state.update {
-                it.copy(
-                    initializing = false,
-                    connecting = false,
-                    connected = false,
-                    setupRequired = true,
-                )
-            }
-            if (_state.value.serverUrl.isNotBlank()) {
-                emit(tr(R.string.error_invalid_server), isError = true)
-            }
-            return
-        }
-        prefs.serverUrl = normalized
-        _state.update { it.copy(serverUrl = normalized, initializing = true, connecting = true) }
+        _state.update { it.copy(initializing = true, setupRequired = false) }
         bootstrapJob = viewModelScope.launch {
-            val known = prefs.knownTribunesCsv.csvSet().toList().sorted()
-            val availableResult = try {
-                Result.success(api.tribunes(normalized))
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                Result.failure(error)
-            }
-            val available = availableResult.getOrElse {
-                emit(
-                    tr(R.string.error_list_tribunes, it.message ?: tr(R.string.error_network)),
-                    isError = true,
-                )
-                known
-            }
-            if (availableResult.isSuccess) {
-                prefs.knownTribunesCsv = available.joinToString(",")
-            }
-
-            val configResult = try {
-                Result.success(api.blockedIdentities(normalized))
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                Result.failure(error)
-            }
-            if (configResult.isSuccess) {
-                serverBlocked = configResult.getOrThrow().toSet()
-            } else if (clearPosts) {
-                serverBlocked = emptySet()
+            val results = coroutineScope {
+                enabledServers.map { server ->
+                    async {
+                        val names = try {
+                            Result.success(api.tribunes(server.url))
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            Result.failure(error)
+                        }
+                        val blocked = try {
+                            Result.success(api.blockedIdentities(server.url))
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            Result.failure(error)
+                        }
+                        Triple(server, names, blocked)
+                    }
+                }.awaitAll()
             }
 
-            val stored = prefs.selectedTribunesCsv.csvSet()
-            val selected = when {
-                // A successful, empty list means the server really has no
-                // tribune. Only fall back to cached names when the list request
-                // failed.
-                availableResult.isSuccess && available.isEmpty() -> emptyList()
-                available.isEmpty() -> stored.toList().sorted()
-                stored.isEmpty() -> available
-                else -> {
-                    val filtered = available.filter { it in stored }
-                    if (filtered.isEmpty()) available else filtered
+            val known = HashMap(knownTribunes)
+            val blockedByServer = HashMap(serverBlockedById)
+            blockedByServer.keys.retainAll(enabledServers.mapTo(HashSet()) { it.url })
+            for ((server, namesResult, blockedResult) in results) {
+                if (namesResult.isSuccess) {
+                    known[server.url] = namesResult.getOrThrow().sorted()
+                    reportedGb2cFailures.remove(server.url)
+                    if (gb2cStatus[server.url] == null) {
+                        gb2cStatus[server.url] = SourceStatus.Working
+                    }
+                } else {
+                    gb2cStatus[server.url] = SourceStatus.Error
+                    if (reportedGb2cFailures.add(server.url)) {
+                        emit(
+                            tr(
+                                R.string.error_list_tribunes,
+                                namesResult.exceptionOrNull()?.message
+                                    ?: tr(R.string.error_network),
+                            ),
+                            isError = true,
+                        )
+                    }
+                }
+                blockedResult.onSuccess { blockedByServer[server.url] = it.toSet() }
+                if (blockedResult.isFailure && clearPosts) {
+                    blockedByServer.remove(server.url)
                 }
             }
+            knownTribunes.clear()
+            knownTribunes.putAll(known)
+            prefs.saveKnownTribunes(known)
+            serverBlockedById.clear()
+            serverBlockedById.putAll(blockedByServer)
+            serverBlocked = blockedByServer.values.flatten().toSet()
 
-            if (selected.isEmpty()) {
-                _state.update {
-                    it.copy(
-                        initializing = false,
-                        connecting = false,
-                        connected = false,
-                        availableTribunes = available,
-                        tribunes = emptyList(),
-                        activeTribune = null,
-                        serverBlocked = serverBlocked,
-                        displayPosts = emptyList(),
-                        badges = emptyMap(),
-                        selectedKey = null,
-                    )
-                }
-                recomputeNow()
-                emit(tr(R.string.error_no_tribune_server), isError = true)
-                return@launch
-            }
-
-            prefs.selectedTribunesCsv = selected.joinToString(",")
-            val currentActive = _state.value.activeTribune
-            val active = when {
-                pendingDraftOnStart != null && "dlfp" in selected -> "dlfp"
-                else -> currentActive?.takeIf { it in selected } ?: selected.first()
-            }
+            val latest = _state.value
+            val tribunes = buildTribunes(latest.gb2cServers, latest.selectedBoards, latest.boards)
+            val active = chooseActiveTribune(latest.activeTribune, tribunes, pendingDraftOnStart)
             pendingDraftOnStart = null
             selectedKey = null
             _state.update {
                 it.copy(
-                    initializing = false,
-                    availableTribunes = available,
-                    tribunes = selected,
+                    tribunes = tribunes,
                     activeTribune = active,
+                    initializing = false,
+                    setupRequired = false,
                     serverBlocked = serverBlocked,
                     selectedKey = null,
-                    setupRequired = false,
                 )
             }
+            prefs.activeTribuneKey = active?.key
             recomputeNow()
             if (foreground) {
-                startPolling(normalized, selected)
+                syncPolling(force = true)
             } else {
-                _state.update { it.copy(connecting = false) }
+                publishStatus()
+            }
+            if (tribunes.isEmpty() && latest.gb2cServers.any { it.enabled }) {
+                emit(tr(R.string.error_no_tribune_server), isError = true)
             }
         }
     }
 
-    private fun startPolling(baseUrl: String, tribunes: List<String>, force: Boolean = false) {
-        val signature = "$baseUrl|${tribunes.joinToString(",")}"
-        if (!force && signature == pollSignature && pollJob?.isActive == true) return
-        pollJob?.cancel()
-        pollSignature = signature
-        if (tribunes.isEmpty()) {
-            _state.update { it.copy(connecting = false, connected = false) }
-            return
+    /**
+     * Keep one gb2c stream per enabled server and one loop per selected board,
+     * so a slow source cannot delay the others.
+     */
+    private fun syncPolling(force: Boolean = false) {
+        val current = _state.value
+        val desiredGb2c = LinkedHashMap<String, List<String>>()
+        for (server in current.gb2cServers) {
+            if (!server.enabled) continue
+            val names = current.tribunes.asSequence()
+                .filter { it.source == SourceId.Gb2c(server.url) }
+                .map { it.name }
+                .sorted()
+                .toList()
+            if (names.isNotEmpty()) desiredGb2c[server.url] = names
         }
-        _state.update { it.copy(connecting = true, connected = false) }
-        pollJob = viewModelScope.launch {
+        val desiredBoards = current.tribunes.asSequence()
+            .mapNotNull { (it.source as? SourceId.Direct)?.board }
+            .filter { name -> current.boards.any { it.name == name } }
+            .distinct()
+            .sorted()
+            .toList()
+
+        val gb2cReady = !force &&
+            gb2cPollJobs.keys == desiredGb2c.keys &&
+            gb2cPollJobs.values.all { it.isActive }
+        val boardsReady = !force &&
+            boardPollJobs.keys == desiredBoards.toSet() &&
+            boardPollJobs.values.all { it.isActive }
+        if (gb2cReady && boardsReady) return
+
+        stopAllPolling()
+        for ((url, names) in desiredGb2c) {
+            startGb2cPolling(url, names)
+        }
+        for (name in desiredBoards) {
+            current.boards.firstOrNull { it.name == name }?.let(::startBoardPolling)
+        }
+        publishStatus()
+    }
+
+    private fun startGb2cPolling(url: String, tribunes: List<String>) {
+        if (tribunes.isEmpty()) return
+        gb2cStatus[url] = SourceStatus.Working
+        publishStatus()
+        val job = viewModelScope.launch {
             try {
-                api.poll(baseUrl, tribunes).collect { event ->
+                api.poll(url, tribunes).collect { event ->
                     when (event) {
-                        PollEvent.Connecting -> _state.update {
-                            it.copy(connecting = true, connected = false)
+                        PollEvent.Connecting -> {
+                            gb2cStatus[url] = SourceStatus.Working
+                            publishStatus()
                         }
 
-                        PollEvent.Connected -> _state.update {
-                            it.copy(connecting = false, connected = true)
+                        PollEvent.Connected -> {
+                            gb2cStatus[url] = SourceStatus.Online
+                            reportedGb2cFailures.remove(url)
+                            publishStatus()
                         }
 
                         is PollEvent.NewPost -> ingest(event.post)
 
-                        is PollEvent.Failed -> _state.update {
-                            it.copy(connecting = true, connected = false)
+                        is PollEvent.Failed -> {
+                            gb2cStatus[url] = SourceStatus.Error
+                            publishStatus()
                         }
                     }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                _state.update { it.copy(connecting = false, connected = false) }
-                emit(error.message ?: tr(R.string.error_poll_stopped), isError = true)
-            }
-        }
-    }
-
-    private fun stopPolling() {
-        pollJob?.cancel()
-        pollJob = null
-        pollSignature = null
-        _state.update { it.copy(connected = false, connecting = false) }
-    }
-
-    /**
-     * Poll every selected board directly, at gb2c's usual 30 second interval.
-     * Each board has its own loop so a slow or broken board cannot delay the
-     * others.
-     */
-    private fun startBoardPolling(tribunes: List<String>, force: Boolean = false) {
-        val boards = _state.value.boards
-            .filter { it.name in tribunes }
-            .sortedBy { it.name }
-        val signature = boards.joinToString(",") { "${it.name}|${it.backendUrl}" }
-        if (!force && signature == boardPollSignature && boardPollJob?.isActive == true) return
-        boardPollJob?.cancel()
-        boardPollSignature = signature
-        boardStatus.clear()
-        reportedBoardFailures.clear()
-        if (boards.isEmpty()) {
-            _state.update { it.copy(connecting = false, connected = false) }
-            return
-        }
-        boards.forEach { boardStatus[it.name] = false }
-        _state.update { it.copy(connecting = true, connected = false) }
-        boardPollJob = viewModelScope.launch {
-            coroutineScope {
-                for (board in boards) {
-                    launch {
-                        while (isActive) {
-                            val started = System.currentTimeMillis()
-                            refreshBoard(board)
-                            val elapsed = System.currentTimeMillis() - started
-                            delay((BOARD_POLL_INTERVAL_MS - elapsed).coerceAtLeast(1_000L))
-                        }
-                    }
+                gb2cStatus[url] = SourceStatus.Error
+                publishStatus()
+                if (reportedGb2cFailures.add(url)) {
+                    emit(error.message ?: tr(R.string.error_poll_stopped), isError = true)
                 }
             }
         }
+        gb2cPollJobs[url] = job
     }
 
-    /** Fetch one board once and update the connection indicator. */
+    private fun stopAllPolling() {
+        gb2cPollJobs.values.forEach { it.cancel() }
+        gb2cPollJobs.clear()
+        boardPollJobs.values.forEach { it.cancel() }
+        boardPollJobs.clear()
+        gb2cStatus.clear()
+        boardStatus.clear()
+        reportedBoardFailures.clear()
+        publishStatus()
+    }
+
+    private fun publishStatus() {
+        val statuses = gb2cStatus.values + boardStatus.values
+        _state.update {
+            it.copy(
+                gb2cStatus = gb2cStatus.toMap(),
+                boardStatus = boardStatus.toMap(),
+                connected = statuses.any { status -> status == SourceStatus.Online },
+                connecting = statuses.any { status -> status == SourceStatus.Working },
+            )
+        }
+    }
+
+    /** Poll one selected board at gb2c's usual 30 second interval. */
+    private fun startBoardPolling(board: Board) {
+        boardStatus[board.name] = SourceStatus.Working
+        publishStatus()
+        val job = viewModelScope.launch {
+            while (isActive) {
+                val started = System.currentTimeMillis()
+                refreshBoard(board)
+                val elapsed = System.currentTimeMillis() - started
+                delay((BOARD_POLL_INTERVAL_MS - elapsed).coerceAtLeast(1_000L))
+            }
+        }
+        boardPollJobs[board.name] = job
+    }
+
+    /** Fetch one board once and update its connection indicator. */
     private suspend fun refreshBoard(board: Board) {
         try {
             val posts = boardClient.fetch(board)
             posts.forEach(::ingest)
-            boardStatus[board.name] = true
+            boardStatus[board.name] = SourceStatus.Online
             reportedBoardFailures.remove(board.name)
-            updateBoardConnection()
+            publishStatus()
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
-            boardStatus[board.name] = false
-            updateBoardConnection()
+            boardStatus[board.name] = SourceStatus.Error
+            publishStatus()
             if (reportedBoardFailures.add(board.name)) {
                 emit(
                     tr(
@@ -493,22 +468,9 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun updateBoardConnection() {
-        val anyConnected = boardStatus.values.any { it }
-        _state.update { it.copy(connected = anyConnected, connecting = false) }
-    }
-
-    private fun stopBoardPolling() {
-        boardPollJob?.cancel()
-        boardPollJob = null
-        boardPollSignature = null
-        boardStatus.clear()
-        reportedBoardFailures.clear()
-        _state.update { it.copy(connected = false, connecting = false) }
-    }
-
     private fun ingest(post: Post) {
-        if (post.tribune !in _state.value.tribunes) return
+        val tribuneKey = post.tribuneKey
+        if (_state.value.tribunes.none { it.key == tribuneKey.key }) return
         val existing = allPosts[post.key]
         if (existing == post) return
         allPosts[post.key] = post
@@ -554,7 +516,7 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
             emptyList()
         } else {
             posts.asSequence()
-                .filter { it.tribune == active }
+                .filter { it.tribuneKey == active }
                 .sortedBy { it.id }
                 .mapNotNull { post ->
                     val conversation = computed.posts[post.key] ?: return@mapNotNull null
@@ -598,16 +560,16 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         for (tribune in current.tribunes) {
             var bigorno = false
             var reply = false
-            val lastRead = prefs.lastReadPostId(tribune)
+            val lastRead = prefs.lastReadPostId(tribune.key)
             for (post in posts) {
-                if (post.tribune != tribune || post.id <= lastRead) continue
+                if (post.tribuneKey != tribune || post.id <= lastRead) continue
                 val conversation = computed.posts[post.key] ?: continue
                 if (conversation.isMine) continue
                 if (conversation.hidden && current.displayMode == BlockedDisplayMode.Hide) continue
                 bigorno = bigorno || conversation.isBigorno
                 reply = reply || conversation.isReply
             }
-            badges[tribune] = TribuneBadge(bigorno, reply)
+            badges[tribune.key] = TribuneBadge(bigorno, reply)
         }
 
         _state.update {
@@ -625,32 +587,34 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         return parsedCache.getOrPut(message) { MessageParser.parse(message) }
     }
 
-    fun selectTribune(name: String) {
-        selectTribuneInternal(name, markRead = true, clearSelection = true)
+    fun selectTribune(key: String) {
+        selectTribuneInternal(key, markRead = true, clearSelection = true)
     }
 
-    private fun selectTribuneInternal(name: String, markRead: Boolean, clearSelection: Boolean) {
+    private fun selectTribuneInternal(key: String, markRead: Boolean, clearSelection: Boolean) {
         val current = _state.value
-        if (name == current.activeTribune || name !in current.tribunes) return
+        val target = current.tribunes.firstOrNull { it.key == key } ?: return
+        if (target.key == current.activeTribune?.key) return
         val previous = current.activeTribune
         if (markRead && previous != null) {
             val lastVisible = current.displayPosts.maxOfOrNull { it.post.id }
-            if (lastVisible != null) prefs.setLastReadPostId(previous, lastVisible)
+            if (lastVisible != null) prefs.setLastReadPostId(previous.key, lastVisible)
         }
         val oldDraft = current.draft
-        val newText = if (previous != null) {
-            MessageParser.rewriteBouchotSuffix(oldDraft.text, previous, name)
+        val newText = if (previous != null && previous.name != target.name) {
+            MessageParser.rewriteBouchotSuffix(oldDraft.text, previous.name, target.name)
         } else {
             oldDraft.text
         }
         prefs.draft = newText
+        prefs.activeTribuneKey = target.key
         val delta = newText.length - oldDraft.text.length
         val start = (oldDraft.selectionStart + delta).coerceIn(0, newText.length)
         val end = (oldDraft.selectionEnd + delta).coerceIn(0, newText.length)
         if (clearSelection) selectedKey = null
         _state.update {
             it.copy(
-                activeTribune = name,
+                activeTribune = target,
                 draft = TextDraft(newText, start, end),
                 selectedKey = selectedKey,
             )
@@ -664,7 +628,7 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         val size = current.tribunes.size
         val currentIndex = current.activeIndex.takeIf { it >= 0 } ?: 0
         val next = ((currentIndex + direction) % size + size) % size
-        selectTribune(current.tribunes[next])
+        selectTribune(current.tribunes[next].key)
     }
 
     fun selectPost(key: String) {
@@ -697,8 +661,8 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
             emit(tr(R.string.error_post_hidden, ref.displayText), isError = true)
             return
         }
-        if (target.tribune != current.activeTribune) {
-            selectTribuneInternal(target.tribune, markRead = true, clearSelection = true)
+        if (target.tribuneKey.key != current.activeKey) {
+            selectTribuneInternal(target.tribuneKey.key, markRead = true, clearSelection = true)
         }
         selectedKey = targetKey
         _state.update {
@@ -718,7 +682,7 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
     fun insertReplyClock(postKey: String) {
         val post = allPosts[postKey] ?: return
         val active = _state.value.activeTribune
-        val suffix = if (post.tribune != active) "@${post.tribune}" else ""
+        val suffix = if (post.tribuneKey.name != active?.name) "@${post.tribune}" else ""
         // A bare clock always means "today". Use the long form when the post is
         // older so the reference cannot resolve to today's post at that time.
         // The space separator is the readable 8601 variant accepted by gb3.
@@ -802,22 +766,21 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         val tribune = current.activeTribune ?: return
         val message = current.draft.text.trim()
         if (message.isEmpty()) return
-        val board = if (current.directBoards) {
-            current.boards.firstOrNull { it.name == tribune }
-        } else {
-            null
+        val board = (tribune.source as? SourceId.Direct)?.let { direct ->
+            current.boards.firstOrNull { it.name == direct.board }
         }
-        if (current.directBoards && board == null) {
-            emit(tr(R.string.error_unknown_board, tribune), isError = true)
+        if (tribune.source is SourceId.Direct && board == null) {
+            emit(tr(R.string.error_unknown_board, tribune.name), isError = true)
             return
         }
-        val needsLinuxfr = board?.requiresOAuth == true || (!current.directBoards && tribune == "dlfp")
+        val needsLinuxfr = board?.requiresOAuth == true ||
+            (tribune.source is SourceId.Gb2c && tribune.name == "dlfp")
         if (needsLinuxfr) {
             viewModelScope.launch {
                 _state.update { it.copy(sending = true) }
                 val token = ensureLinuxfrToken()
                 if (token == null) {
-                    if (current.directBoards && current.serverUrl.isBlank()) {
+                    if (tribune.source is SourceId.Direct && current.serverUrl.isBlank()) {
                         _state.update { it.copy(sending = false) }
                         emit(tr(R.string.error_linuxfr_needs_server), isError = true)
                         return@launch
@@ -835,25 +798,26 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun postMessage(tribune: String, message: String, accessToken: String?) {
+    private fun postMessage(tribune: TribuneKey, message: String, accessToken: String?) {
         val info = _state.value.nickname
-        val board = if (_state.value.directBoards) {
-            _state.value.boards.firstOrNull { it.name == tribune }
-        } else {
-            null
+        val board = (tribune.source as? SourceId.Direct)?.let { direct ->
+            _state.value.boards.firstOrNull { it.name == direct.board }
         }
         _state.update { it.copy(sending = true) }
         clearDraft()
         viewModelScope.launch {
             try {
-                if (board != null) {
-                    boardClient.post(board, info, message, accessToken)
-                } else {
-                    api.post(_state.value.serverUrl, tribune, info, message, accessToken)
+                when (val source = tribune.source) {
+                    is SourceId.Gb2c ->
+                        api.post(source.url, tribune.name, info, message, accessToken)
+
+                    is SourceId.Direct ->
+                        board?.let { boardClient.post(it, info, message, accessToken) }
+                            ?: throw IOException("unknown board ${source.board}")
                 }
                 prefs.lastPostedMessage = message
                 _state.update { it.copy(sending = false, lastPosted = message) }
-                emit(tr(R.string.msg_posted_to, tribune))
+                emit(tr(R.string.msg_posted_to, tribune.name))
                 // gb2c polls immediately after a post; do the same so the new
                 // message shows up without waiting for the next 30 second tick.
                 if (board != null) refreshBoard(board)
@@ -927,22 +891,22 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
 
     fun saveSettings(input: SettingsInput): Boolean {
         val current = _state.value
-        val mode = input.connectionMode
-        val modeChanged = mode != current.connectionMode
-        val normalized = when {
-            input.serverUrl.isBlank() -> null
-            else -> Gb3Api.normalizeServerUrl(input.serverUrl)
-        }
-        if (mode == ConnectionMode.Server && normalized == null) {
+        val servers = input.gb2cServers.map { it.normalized() }
+        if (servers.any { it.validationError() != null }) {
             emit(tr(R.string.error_invalid_server), isError = true)
             return false
         }
-        if (input.serverUrl.isNotBlank() && normalized == null) {
-            emit(tr(R.string.error_invalid_server), isError = true)
+        if (servers.groupBy { it.url }.any { (_, sameUrl) -> sameUrl.size > 1 }) {
+            emit(tr(R.string.error_duplicate_server), isError = true)
             return false
         }
-        val effectiveServer = normalized.orEmpty()
-        val serverChanged = effectiveServer != current.serverUrl
+        val selectedBoards = input.selectedBoards
+            .filter { name -> current.boards.any { it.name == name } }
+            .toSet()
+        if (servers.none { it.enabled } && selectedBoards.isEmpty()) {
+            emit(tr(R.string.error_no_source), isError = true)
+            return false
+        }
         val totozServer = if (input.totozServerUrl.isBlank()) {
             ""
         } else {
@@ -956,40 +920,25 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         }
         val blocked = input.blockedIdentities.csvSet()
         val plopList = input.plopList.csvSet()
-        val available = when (mode) {
-            ConnectionMode.DirectBoards -> current.boards.map { it.name }.sorted()
-            ConnectionMode.Server -> current.availableTribunes
-        }
-        val requested = input.selectedTribunes.filter { it in available }
-        val effectiveSelected = when (mode) {
-            ConnectionMode.DirectBoards -> when {
-                requested.isNotEmpty() -> requested.sorted()
-                available.isNotEmpty() -> available
-                else -> emptyList()
-            }
+        val servicesServer = servers.firstOrNull { it.enabled }?.url ?: current.serverUrl
+        val sourcesChanged = servers != current.gb2cServers ||
+            selectedBoards != current.selectedBoards
 
-            ConnectionMode.Server -> when {
-                available.isEmpty() -> requested.toList()
-                requested.isEmpty() -> available
-                else -> requested.toList()
-            }
-        }
-
-        val resetSelection = mode == ConnectionMode.Server && (serverChanged || modeChanged)
-        prefs.serverUrl = effectiveServer
-        prefs.connectionMode = mode
+        prefs.saveGb2cServers(servers)
+        prefs.saveSelectedBoards(selectedBoards)
+        prefs.serverUrl = servicesServer
         prefs.totozServerUrl = totozServer
         prefs.nickname = nickname
         prefs.localBlockedIdentitiesCsv = blocked.joinToString(",")
         prefs.blockedDisplayMode = input.displayMode
         prefs.plopListCsv = plopList.joinToString(",")
-        prefs.selectedTribunesCsv = if (resetSelection) "" else effectiveSelected.joinToString(",")
         emit(tr(R.string.msg_settings_saved))
 
         _state.update {
             it.copy(
-                serverUrl = effectiveServer,
-                connectionMode = mode,
+                serverUrl = servicesServer,
+                gb2cServers = servers,
+                selectedBoards = selectedBoards,
                 totozServerUrl = totozServer,
                 nickname = nickname,
                 localBlocked = blocked,
@@ -1000,69 +949,34 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
 
-        if (modeChanged || (mode == ConnectionMode.Server && serverChanged)) {
+        if (sourcesChanged) {
             allPosts.clear()
             parsedCache.clear()
             plopOverrides.clear()
             selectedKey = null
             serverBlocked = emptySet()
+            serverBlockedById.clear()
+            gb2cStatus.clear()
+            boardStatus.clear()
             _state.update {
                 it.copy(
-                    serverBlocked = emptySet(),
-                    availableTribunes = if (mode == ConnectionMode.DirectBoards) {
-                        it.boards.map { board -> board.name }.sorted()
-                    } else {
-                        emptyList()
-                    },
                     tribunes = emptyList(),
                     activeTribune = null,
                     displayPosts = emptyList(),
                     badges = emptyMap(),
                     selectedKey = null,
                     connected = false,
-                    connecting = true,
+                    connecting = false,
                     initializing = true,
                     setupRequired = false,
+                    serverBlocked = emptySet(),
+                    gb2cStatus = emptyMap(),
+                    boardStatus = emptyMap(),
                 )
             }
+            prefs.activeTribuneKey = null
             bootstrap(clearPosts = true)
             return true
-        }
-
-        val tribunesChanged = effectiveSelected.toSet() != current.tribunes.toSet()
-        if (tribunesChanged) {
-            val allowed = effectiveSelected.toSet()
-            allPosts.keys.toList()
-                .filter { key -> allPosts[key]?.tribune !in allowed }
-                .forEach(allPosts::remove)
-            selectedKey = null
-            val active = current.activeTribune?.takeIf { it in effectiveSelected }
-                ?: effectiveSelected.firstOrNull()
-            _state.update {
-                it.copy(
-                    tribunes = effectiveSelected,
-                    activeTribune = active,
-                    selectedKey = null,
-                )
-            }
-            if (foreground) {
-                if (effectiveSelected.isEmpty()) {
-                    stopPolling()
-                    stopBoardPolling()
-                } else if (mode == ConnectionMode.DirectBoards) {
-                    stopPolling()
-                    startBoardPolling(effectiveSelected, force = true)
-                } else {
-                    stopBoardPolling()
-                    startPolling(effectiveServer, effectiveSelected, force = true)
-                }
-            } else {
-                stopPolling()
-                stopBoardPolling()
-            }
-        } else if (effectiveSelected.isEmpty()) {
-            stopPolling()
-            stopBoardPolling()
         }
 
         for (post in allPosts.values) {
@@ -1102,27 +1016,26 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         val custom = current.boards.filter { !it.predefined } + board
         prefs.customBoardsJson = BoardCodec.encode(custom)
         val boards = PredefinedBoards.merge(custom)
-        val names = boards.map { it.name }.sorted()
-        val selected = if (current.directBoards) {
-            (current.tribunes + board.name).distinct().sorted()
-        } else {
-            current.tribunes
-        }
-        if (current.directBoards) {
-            prefs.selectedTribunesCsv = selected.joinToString(",")
-        }
+        val selectedBoards = current.selectedBoards + board.name
+        prefs.saveSelectedBoards(selectedBoards)
+        val tribunes = buildTribunes(current.gb2cServers, selectedBoards, boards)
+        val active = current.activeTribune
+            ?.takeIf { candidate -> tribunes.any { it.key == candidate.key } }
+            ?: tribunes.firstOrNull()
+        prefs.activeTribuneKey = active?.key
         _state.update {
             it.copy(
                 boards = boards,
-                availableTribunes = if (current.directBoards) names else it.availableTribunes,
-                tribunes = selected,
-                activeTribune = it.activeTribune ?: selected.firstOrNull(),
+                selectedBoards = selectedBoards,
+                tribunes = tribunes,
+                activeTribune = active,
+                setupRequired = false,
             )
         }
-        if (current.directBoards) {
-            recomputeNow()
-            if (foreground) startBoardPolling(selected, force = true)
+        if (foreground) {
+            startBoardPolling(board)
         }
+        recomputeNow()
         emit(tr(R.string.msg_board_added, board.name))
         return true
     }
@@ -1138,35 +1051,31 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         val custom = current.boards.filter { !it.predefined && it.name != name }
         prefs.customBoardsJson = BoardCodec.encode(custom)
         val boards = PredefinedBoards.merge(custom)
-        val names = boards.map { it.name }.sorted()
-        val selected = current.tribunes.filter { it != name }
+        val selectedBoards = current.selectedBoards - name
+        prefs.saveSelectedBoards(selectedBoards)
+        val direct = TribuneKey(SourceId.Direct(name), name)
         allPosts.keys.toList()
-            .filter { key -> allPosts[key]?.tribune == name }
+            .filter { key -> allPosts[key]?.tribuneKey == direct }
             .forEach(allPosts::remove)
+        boardPollJobs.remove(name)?.cancel()
+        boardStatus.remove(name)
+        val tribunes = buildTribunes(current.gb2cServers, selectedBoards, boards)
         val active = current.activeTribune
-            ?.takeIf { it != name && it in selected }
-            ?: selected.firstOrNull()
-        if (current.directBoards) {
-            prefs.selectedTribunesCsv = selected.joinToString(",")
-        }
+            ?.takeIf { candidate -> tribunes.any { it.key == candidate.key } }
+            ?: tribunes.firstOrNull()
+        prefs.activeTribuneKey = active?.key
         _state.update {
             it.copy(
                 boards = boards,
-                availableTribunes = if (current.directBoards) names else it.availableTribunes,
-                tribunes = selected,
+                selectedBoards = selectedBoards,
+                tribunes = tribunes,
                 activeTribune = active,
+                setupRequired = current.gb2cServers.none { server -> server.enabled } &&
+                    selectedBoards.isEmpty(),
             )
         }
-        if (current.directBoards) {
-            recomputeNow()
-            if (foreground) {
-                if (selected.isEmpty()) {
-                    stopBoardPolling()
-                } else {
-                    startBoardPolling(selected, force = true)
-                }
-            }
-        }
+        publishStatus()
+        recomputeNow()
         emit(tr(R.string.msg_board_removed, name))
         return true
     }
@@ -1185,13 +1094,16 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         val pending = prefs.pendingLinuxfrMessage
         prefs.pendingLinuxfrMessage = null
         val current = _state.value
-        val target = if ("dlfp" in current.tribunes) "dlfp" else current.activeTribune
+        val target = current.activeTribune?.takeIf { it.name == "dlfp" }
+            ?: current.tribunes.firstOrNull { it.name == "dlfp" }
+            ?: current.activeTribune
         val draft = if (pending != null) {
             TextDraft(pending, pending.length, pending.length)
         } else {
             current.draft
         }
         prefs.draft = draft.text
+        prefs.activeTribuneKey = target?.key
         _state.update {
             it.copy(
                 linuxfr = session,
@@ -1274,9 +1186,10 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun markAllRead() {
-        val maxIds = analysis?.maxIdByTribune ?: allPosts.values.groupBy { it.tribune }
+        val maxIds = analysis?.maxIdByTribune ?: allPosts.values
+            .groupBy { it.tribuneKey.key }
             .mapValues { (_, posts) -> posts.maxOf { it.id } }
-        prefs.markAllRead(_state.value.tribunes, maxIds)
+        prefs.markAllRead(_state.value.tribunes.map { it.key }, maxIds)
         recomputeNow()
         emit(tr(R.string.msg_all_read))
     }

@@ -19,7 +19,12 @@ object BoardTsv {
     private const val MAX_LINE_LENGTH = 512 * 1024
     private const val MAX_LINES = 20_000
 
-    fun parse(body: String, tribune: String, maxPosts: Int = MAX_POSTS): List<Post> {
+    fun parse(
+        body: String,
+        tribune: String,
+        source: SourceId,
+        maxPosts: Int = MAX_POSTS,
+    ): List<Post> {
         if (tribune.isBlank()) return emptyList()
         val safeMax = maxPosts.coerceAtLeast(1)
         val postsById = LinkedHashMap<Long, Post>()
@@ -33,14 +38,14 @@ object BoardTsv {
             start = if (newline >= 0) newline + 1 else body.length + 1
             lines++
             if (line.isEmpty() || line.length > MAX_LINE_LENGTH) continue
-            val post = parseLine(line, tribune) ?: continue
+            val post = parseLine(line, tribune, source) ?: continue
             // If a board repeats an id, the last occurrence wins.
             postsById[post.id] = post
         }
         return postsById.values.sortedBy { it.id }.takeLast(safeMax)
     }
 
-    private fun parseLine(line: String, tribune: String): Post? {
+    private fun parseLine(line: String, tribune: String, source: SourceId): Post? {
         val record = splitTSVLine(line) ?: return null
         val rawId = record[0].trim().removePrefix("\uFEFF")
         val id = rawId.toLongOrNull()?.takeIf { it > 0 } ?: return null
@@ -57,6 +62,7 @@ object BoardTsv {
             login = login,
             message = message,
             tribune = tribune,
+            source = source,
         )
     }
 

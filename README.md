@@ -2,8 +2,9 @@
 
 A native Android client for the [gb3](https://github.com/zorel/gb3) `gb2c` server. It talks directly
 to the same HTTP/SSE API as `gb3tui` and `gc2`, and can also act as its own
-tribune client: in **Direct boards** mode it downloads the TSV backend and posts
-to each board URL itself, without a gb2c server in the middle. There is no
+tribune client: it downloads each selected direct board's backend and posts to
+its URL itself, without a gb2c server in the middle. Like roinroin, it can use
+one or more gb2c servers **and** direct boards at the same time. There is no
 WebView for the tribune itself; a small WebView is only used to complete the
 LinuxFR OAuth flow.
 
@@ -11,6 +12,10 @@ LinuxFR OAuth flow.
 
 The client covers the feature set of `gb3tui` and `gc2`, adapted to touch:
 
+- **multiple gb2c servers and direct boards at the same time**, like roinroin:
+  one SSE stream per enabled gb2c server, one poll loop per selected board, and
+  source-qualified tribunes so the same board name can appear from several
+  sources without mixing posts, badges or last-read markers;
 - live posts from `/gb2c/poll` over server-sent events, with automatic
   reconnection and foreground-only streaming;
 - **direct boards**: gb2c's predefined boards plus user-defined boards, polled
@@ -20,8 +25,10 @@ The client covers the feature set of `gb3tui` and `gc2`, adapted to touch:
 - posting to any tribune through `/gb2c/post` or directly to the selected
   board, including LinuxFR (`dlfp`) OAuth login, token refresh and restoration
   of the message while authorizing;
-- tribune switching with chips, horizontal swipes and unread/reply/bigorno
-  badges;
+- tribune switching with source-grouped chips (`gb2c · server name`, then
+  `board direct`), horizontal swipes and unread/reply/bigorno badges. The
+  header shows the active tribune and its source, e.g.
+  `/ moules · gb2c · local` or `/ moules · board direct`;
 - clock references (norloges): tap one to jump to the referenced post, tap a
   post clock to quote it in the composer, and see reverse references
   highlighted while a post is selected;
@@ -148,27 +155,33 @@ builds a signed release APK and attaches it to the release as
 `gb3android-<tag>.apk`. That workflow requires the four signing secrets and
 fails instead of attaching a debug-signed APK when they are missing.
 
-## First run
+## Sources
 
-The app asks how to reach tribunes:
+The app can read several sources at once, like roinroin:
 
-- **gb2c server** - enter the base URL of a `gb2c` server, for example
-  `https://gb3.example.com` or `http://192.168.1.10:16666`. Posts stream over
-  `/gb2c/poll` and are sent through `/gb2c/post`, as before.
-- **Direct boards** - pick one or more boards and leave the server URL empty.
-  The app downloads each board's TSV backend itself and posts to its post URL.
-  A gb2c URL is still optional in this mode for emoji search, attachment uploads
-  and LinuxFR OAuth. Totoz search is configured separately with its own direct
-  server URL.
+- **gb2c servers** - enter the base URL of one or more `gb2c` servers, for
+  example `https://gb3.example.com` or `http://192.168.1.10:16666`. Each one
+  streams over `/gb2c/poll` and is posted to through `/gb2c/post`. The first
+  enabled server also handles emoji search, attachment uploads and LinuxFR
+  OAuth.
+- **Direct boards** - check any of the built-in or custom boards. The app
+  downloads each board's TSV backend itself and posts to its post URL. They
+  work alongside the gb2c servers, with their own connection status.
+
+A gb2c server and a direct board can expose the same tribune name. They are
+kept as two separate entries, each with its own posts, badges and last-read
+marker. The tribune bar groups chips by source and the header names the active
+source. Settings can add, remove, rename or disable gb2c servers, and
+check/uncheck direct boards.
 
 The nickname is sent as the post `info`; if it is left empty, a gc2-style random
 nickname is generated. On an Android emulator, `localhost` is the emulator
 itself: use `http://10.0.2.2:16666` to reach a gb2c process running on the host
 machine.
 
-## Custom boards
+## Direct boards
 
-Direct mode ships the same default boards as gb2c:
+The app ships the same default boards as gb2c:
 
 | Board | Backend | Post field |
 | --- | --- | --- |
@@ -182,7 +195,8 @@ Direct mode ships the same default boards as gb2c:
 | `reveildutroll` | `https://miaoli.im/%2B6VtcdSCI0Y/posts.tsv` | `message` |
 
 Open **Settings -> Boards -> Add custom board** to add any other bouchot-style
-board. A custom board needs:
+board, then leave it checked to show its tribune next to the gb2c sources. A
+custom board needs:
 
 - a unique name without spaces or commas (it becomes the tribune name);
 - the backend URL returning five-column TSV (`id`, `time`, `info`, `login`,
@@ -204,7 +218,7 @@ server gb2c uses internally.
 
 - Search requests go directly to `<server>/search.xml?terms=...`.
 - Preview images are loaded from `<server>/img/<name>`.
-- Totoz search therefore works in direct-board mode without a gb2c server.
+- Totoz search therefore works without any gb2c server.
 - Both a base URL (`https://nsfw.totoz.eu`) and a full
   `https://nsfw.totoz.eu/search.xml` endpoint are accepted.
 - Leaving the field empty falls back to gb2c's `/gb2c/totoz/search` endpoint
@@ -215,7 +229,7 @@ declarations are disabled, responses are bounded to 2 MiB, and blank names are
 ignored. Image URLs are always rebuilt from the configured server, like gb2c
 does, instead of trusting an image URL supplied by the server.
 
-Direct mode is deliberately defensive: rows with fewer than five fields or with
+Direct boards are read defensively: rows with fewer than five fields or with
 an invalid/non-positive id are skipped, duplicate ids keep the latest row, extra
 columns are dropped, control characters are removed, messages are capped at
 64 KiB and backend responses are capped at 8 MiB.
@@ -236,16 +250,19 @@ columns are dropped, control characters are removed, messages are capped at
 
 Settings are stored locally in `SharedPreferences`:
 
-- connection mode, server URL, totoz server URL and nickname;
-- selected tribunes and custom board definitions;
+- gb2c server list (name, URL, enabled), totoz server URL and nickname;
+- selected direct boards and custom board definitions;
 - local blocked identities and hide/gray mode;
 - plop list;
-- last posted message and per-tribune last-read marker;
+- last posted message, active source-qualified tribune and per-tribune
+  last-read markers;
 - LinuxFR access/refresh tokens.
 
 ## API endpoints used
 
-In gb2c mode:
+Both source kinds can be active at the same time.
+
+For each enabled gb2c server:
 
 | Endpoint | Usage |
 | --- | --- |
@@ -259,7 +276,7 @@ In gb2c mode:
 | `/gb2c/linuxfr/authorize` | OAuth authorization page |
 | `/gb2c/linuxfr/refresh` | refresh a LinuxFR token |
 
-In direct board mode:
+For each selected direct board:
 
 | Endpoint | Usage |
 | --- | --- |
@@ -269,8 +286,8 @@ In direct board mode:
 | `<totoz server>/img/<name>` | totoz preview image |
 
 Each configured board's `backendUrl` and `postUrl` are contacted directly.
-Totoz search and previews use the configured totoz server. The optional gb2c
-server is only used for emoji search, attachments and LinuxFR OAuth.
+Totoz search and previews use the configured totoz server. The first enabled
+gb2c server is also used for emoji search, attachments and LinuxFR OAuth.
 
 The LinuxFR redirect configured on the gb2c server must be reachable from the
 device. gb2c currently builds that redirect with `https://`, so a gb2c instance
@@ -305,7 +322,7 @@ app/src/test/                  parser, conversation, TSV and board client tests
   with `GB2C_BLOCKED_IDENTITIES` are displayed in Settings but can only be changed
   on the server. Local blocked identities are editable in the app.
 - Attachments are inserted as their public URL in the composer, like gc2. They
-  need a gb2c server URL even in direct board mode.
+  need at least one enabled gb2c server, even when using direct boards.
 - Totoz images are loaded from the configured totoz server
   (`https://nsfw.totoz.eu` by default) and previewed at their original size.
 - LinuxFR is only needed to post to the `dlfp` tribune. OAuth uses a dedicated

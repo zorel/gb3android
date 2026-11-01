@@ -36,6 +36,7 @@ class SseBurstTest {
                     .take(total)
                     .collect { event ->
                         received += event.post.id
+                        assertEquals(SourceId.Gb2c(base), event.post.source)
                         // Simulate a consumer that is slower than the network.
                         delay(1)
                     }

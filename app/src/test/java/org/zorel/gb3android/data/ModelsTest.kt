@@ -5,7 +5,7 @@ import org.junit.Test
 
 class ModelsTest {
     private fun post(info: String = "", login: String = "") =
-        Post(1, "20261027120000", info, login, "message", "trib")
+        Post(1, "20261027120000", info, login, "message", "trib", SourceId.Direct("trib"))
 
     @Test
     fun keepsShortIdentities() {

@@ -114,6 +114,7 @@ class MessageParserTest {
             login = "",
             message = "hello",
             tribune = "trib",
+            source = org.zorel.gb3android.data.SourceId.Direct("trib"),
         )
         assertEquals("12:34:56", post.clock)
         assertEquals("123456", post.clockKey)
