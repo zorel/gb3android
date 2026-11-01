@@ -20,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -48,7 +49,7 @@ fun PostRow(
     onActions: () -> Unit,
     onNorlogeClick: (MessageToken.Norloge) -> Unit,
     onUrlClick: (String) -> Unit,
-    onTotozClick: (String) -> Unit,
+    onTotozClick: (String, Offset) -> Unit,
 ) {
     val palette = LocalGb3Palette.current
     val colors = MaterialTheme.colorScheme

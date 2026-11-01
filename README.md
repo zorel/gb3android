@@ -228,7 +228,8 @@ columns are dropped, control characters are removed, messages are capped at
 - tap a clock reference inside a message to jump to the referenced post;
 - long-press a post to reply, call the author, copy the message or show its
   metadata;
-- tap a spoiler to reveal or hide it, and tap a totoz to preview it;
+- tap a spoiler to reveal or hide it, and tap a totoz to show its image at its
+  original size just above the totoz characters (tap anywhere to dismiss);
 - use the `+` button in the composer, or the top-right menu, for attachments,
   totoz, emoji, formatting shortcuts and settings.
 
@@ -305,7 +306,7 @@ app/src/test/                  parser, conversation, TSV and board client tests
 - Attachments are inserted as their public URL in the composer, like gc2. They
   need a gb2c server URL even in direct board mode.
 - Totoz images are loaded from the configured totoz server
-  (`https://nsfw.totoz.eu` by default).
+  (`https://nsfw.totoz.eu` by default) and previewed at their original size.
 - LinuxFR is only needed to post to the `dlfp` tribune. OAuth uses a dedicated
   WebView so the token stays in the app and passwords are only entered on
   linuxfr.org. Connecting or refreshing a LinuxFR account requires a gb2c server

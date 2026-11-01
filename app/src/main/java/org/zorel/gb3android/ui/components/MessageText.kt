@@ -5,13 +5,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -38,7 +43,7 @@ fun MessageText(
     revealedSpoilers: Set<Int>,
     onNorlogeClick: (String, MessageToken.Norloge) -> Unit,
     onUrlClick: (String) -> Unit,
-    onTotozClick: (String) -> Unit,
+    onTotozClick: (String, Offset) -> Unit,
     onSpoilerToggle: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -48,6 +53,10 @@ fun MessageText(
     val currentUrlClick by rememberUpdatedState(onUrlClick)
     val currentTotozClick by rememberUpdatedState(onTotozClick)
     val currentSpoilerToggle by rememberUpdatedState(onSpoilerToggle)
+    // Only read from the click listener: the origin changes on every scroll,
+    // and observing it here would recompose each post while the list moves.
+    val textLayout = remember { mutableStateOf<TextLayoutResult?>(null) }
+    val textOrigin = remember { mutableStateOf(Offset.Zero) }
 
     val referenceColor = conversationColor ?: palette.clock
     val annotated = remember(
@@ -151,16 +160,24 @@ fun MessageText(
                             color = palette.totoz,
                             fontWeight = FontWeight.Bold,
                         )
+                        val label = "[:${token.name}]"
+                        val start = length
+                        val end = start + label.length
                         withLink(
                             LinkAnnotation.Clickable(
-                                tag = "totoz:${token.name}",
+                                tag = "totoz:$start:${token.name}",
                                 styles = TextLinkStyles(style = style),
                                 linkInteractionListener = {
-                                    currentTotozClick(token.name)
+                                    val anchor = textLayout.value?.totozAnchor(
+                                        start = start,
+                                        end = end,
+                                        origin = textOrigin.value,
+                                    ) ?: Offset.Unspecified
+                                    currentTotozClick(token.name, anchor)
                                 },
                             ),
                         ) {
-                            append("[:${token.name}]")
+                            append(label)
                         }
                     }
 
@@ -182,12 +199,36 @@ fun MessageText(
 
     Text(
         text = annotated,
-        modifier = modifier,
+        modifier = modifier.onGloballyPositioned { coordinates ->
+            textOrigin.value = coordinates.positionInRoot()
+        },
+        onTextLayout = { textLayout.value = it },
         style = MaterialTheme.typography.bodyMedium.copy(
             lineHeight = 19.sp,
             color = if (hidden) palette.filteredText else colors.onSurface,
         ),
     )
+}
+
+/**
+ * Top-center of the totoz text in root coordinates, mirroring roinroin's
+ * hover preview anchor so the image can sit just above the characters.
+ */
+private fun TextLayoutResult.totozAnchor(start: Int, end: Int, origin: Offset): Offset {
+    val length = layoutInput.text.length
+    if (length == 0) return Offset.Unspecified
+    val first = start.coerceIn(0, length - 1)
+    val last = (end - 1).coerceIn(first, length - 1)
+    var left = Float.MAX_VALUE
+    var right = -Float.MAX_VALUE
+    var top = Float.MAX_VALUE
+    for (offset in first..last) {
+        val box = getBoundingBox(offset)
+        left = minOf(left, box.left)
+        right = maxOf(right, box.right)
+        top = minOf(top, box.top)
+    }
+    return origin + Offset((left + right) / 2f, top)
 }
 
 private fun spanStyleFor(format: InlineFormat, surfaceVariant: Color): SpanStyle {

@@ -4,17 +4,19 @@ import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -42,10 +44,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -54,13 +59,18 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
+import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
+import coil.size.Size
 import org.zorel.gb3android.R
 import org.zorel.gb3android.data.Post
 import org.zorel.gb3android.data.Screen
@@ -84,6 +94,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import kotlin.math.roundToInt
 
 private sealed interface ActiveSheet {
     data object Menu : ActiveSheet
@@ -92,6 +103,9 @@ private sealed interface ActiveSheet {
     data object Emoji : ActiveSheet
     data class PostActions(val post: DisplayPost) : ActiveSheet
 }
+
+/** A totoz tapped in a post, with the text position it should appear above. */
+private data class TotozPreview(val name: String, val anchor: Offset)
 
 @Composable
 fun Gb3App(viewModel: Gb3ViewModel) {
@@ -102,7 +116,7 @@ fun Gb3App(viewModel: Gb3ViewModel) {
     val uriHandler = LocalUriHandler.current
     val context = LocalContext.current
     var sheet by remember { mutableStateOf<ActiveSheet?>(null) }
-    var totozPreview by remember { mutableStateOf<String?>(null) }
+    var totozPreview by remember { mutableStateOf<TotozPreview?>(null) }
 
     DisposableEffect(lifecycleOwner, viewModel) {
         val observer = LifecycleEventObserver { _, event ->
@@ -202,7 +216,9 @@ fun Gb3App(viewModel: Gb3ViewModel) {
                             onActions = { sheet = ActiveSheet.PostActions(it) },
                             onNorlogeClick = viewModel::jumpToNorloge,
                             onUrlClick = ::openExternal,
-                            onTotozClick = { totozPreview = it },
+                            onTotozClick = { name, anchor ->
+                                totozPreview = TotozPreview(name, anchor)
+                            },
                             onDraftChange = viewModel::updateDraft,
                             onSend = viewModel::send,
                             onMenu = { sheet = ActiveSheet.Menu },
@@ -222,9 +238,10 @@ fun Gb3App(viewModel: Gb3ViewModel) {
                         .padding(top = 58.dp, start = 12.dp, end = 12.dp),
                 )
 
-                totozPreview?.let { name ->
+                totozPreview?.let { preview ->
                     TotozImageOverlay(
-                        name = name,
+                        name = preview.name,
+                        anchor = preview.anchor,
                         serverUrl = state.totozServerUrl.ifBlank { TotozServer.DEFAULT_URL },
                         onDismiss = { totozPreview = null },
                     )
@@ -296,7 +313,7 @@ private fun MainScreen(
     onActions: (DisplayPost) -> Unit,
     onNorlogeClick: (String, MessageToken.Norloge) -> Unit,
     onUrlClick: (String) -> Unit,
-    onTotozClick: (String) -> Unit,
+    onTotozClick: (String, Offset) -> Unit,
     onDraftChange: (TextDraft) -> Unit,
     onSend: () -> Unit,
     onMenu: () -> Unit,
@@ -457,11 +474,36 @@ private fun AlarmClock() {
 @Composable
 private fun TotozImageOverlay(
     name: String,
+    anchor: Offset,
     serverUrl: String,
     onDismiss: () -> Unit,
 ) {
     BackHandler(onBack = onDismiss)
-    Box(
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    val imageUrl = remember(serverUrl, name) {
+        TotozServer.imageUrl(serverUrl, name)
+            ?: "${TotozServer.DEFAULT_URL}/img/${Uri.encode(name)}"
+    }
+    val request = remember(context, imageUrl) {
+        ImageRequest.Builder(context)
+            .data(imageUrl)
+            .size(Size.ORIGINAL)
+            .build()
+    }
+    val painter = rememberAsyncImagePainter(request)
+    val intrinsic = (painter.state as? AsyncImagePainter.State.Success)
+        ?.result
+        ?.drawable
+        ?.let { drawable ->
+            if (drawable.intrinsicWidth > 0 && drawable.intrinsicHeight > 0) {
+                IntSize(drawable.intrinsicWidth, drawable.intrinsicHeight)
+            } else {
+                null
+            }
+        }
+
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .pointerInput(name) {
@@ -472,17 +514,51 @@ private fun TotozImageOverlay(
                     onDismiss()
                 }
             },
-        contentAlignment = Alignment.Center,
     ) {
-        AsyncImage(
-            model = TotozServer.imageUrl(serverUrl, name)
-                ?: "${TotozServer.DEFAULT_URL}/img/${Uri.encode(name)}",
-            contentDescription = stringResource(R.string.main_totoz_description, name),
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .fillMaxWidth(0.92f)
-                .heightIn(max = 560.dp)
-                .padding(8.dp),
-        )
+        if (intrinsic != null) {
+            // roinroin shows the totoz at its original pixel size, just above
+            // the characters. One image pixel maps to one dp, like a CSS pixel
+            // on the web; the image only shrinks when it cannot fit on screen.
+            val margin = with(density) { 4.dp.toPx() }
+            val gap = with(density) { 5.dp.toPx() }
+            val belowGap = with(density) { 18.dp.toPx() }
+            val boxWidth = constraints.maxWidth.toFloat()
+            val boxHeight = constraints.maxHeight.toFloat()
+            val densityScale = density.density
+            val scale = minOf(
+                1f,
+                (boxWidth - margin * 2f) / (intrinsic.width * densityScale),
+                (boxHeight - margin * 2f) / (intrinsic.height * densityScale),
+            ).coerceAtLeast(0.05f)
+            val widthPx = intrinsic.width * scale * densityScale
+            val heightPx = intrinsic.height * scale * densityScale
+            val left: Float
+            val top: Float
+            if (anchor.isSpecified) {
+                left = (anchor.x - widthPx / 2f).coerceIn(
+                    margin,
+                    (boxWidth - widthPx - margin).coerceAtLeast(margin),
+                )
+                val above = anchor.y - heightPx - gap
+                top = if (above >= margin) {
+                    above
+                } else {
+                    (anchor.y + belowGap).coerceAtMost(
+                        (boxHeight - heightPx - margin).coerceAtLeast(margin),
+                    )
+                }
+            } else {
+                left = (boxWidth - widthPx) / 2f
+                top = (boxHeight - heightPx) / 2f
+            }
+            Image(
+                painter = painter,
+                contentDescription = stringResource(R.string.main_totoz_description, name),
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .offset { IntOffset(left.roundToInt(), top.roundToInt()) }
+                    .size((intrinsic.width * scale).dp, (intrinsic.height * scale).dp),
+            )
+        }
     }
 }

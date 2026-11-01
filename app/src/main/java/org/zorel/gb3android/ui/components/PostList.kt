@@ -32,6 +32,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -56,7 +57,7 @@ fun PostList(
     onActions: (DisplayPost) -> Unit,
     onNorlogeClick: (String, MessageToken.Norloge) -> Unit,
     onUrlClick: (String) -> Unit,
-    onTotozClick: (String) -> Unit,
+    onTotozClick: (String, Offset) -> Unit,
     onSwipeTribune: (Int) -> Unit,
     onJumpHandled: () -> Unit,
     onRetry: () -> Unit,
