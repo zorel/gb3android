@@ -40,6 +40,13 @@ data class UiState(
     val gb2cServers: List<Gb2cServer> = emptyList(),
     val boards: List<Board> = emptyList(),
     val selectedBoards: Set<String> = emptySet(),
+    /** Known tribune names per gb2c server URL, for the settings picker. */
+    val knownGb2cTribunes: Map<String, List<String>> = emptyMap(),
+    /**
+     * Selected tribune names per gb2c server URL. An absent entry means every
+     * known tribune is shown; an empty set means none is shown.
+     */
+    val selectedGb2cTribunes: Map<String, Set<String>> = emptyMap(),
     val totozServerUrl: String = TotozServer.DEFAULT_URL,
     val nickname: String = "",
     val tribunes: List<TribuneKey> = emptyList(),
@@ -88,6 +95,12 @@ data class UiState(
     fun serverName(url: String): String? =
         gb2cServers.firstOrNull { it.url == url }?.name?.takeIf { it.isNotBlank() }
 
+    fun knownTribunes(server: Gb2cServer): List<String> =
+        knownGb2cTribunes[server.url].orEmpty()
+
+    fun isGb2cTribuneSelected(server: Gb2cServer, name: String): Boolean =
+        selectedGb2cTribunes[server.url]?.contains(name) ?: true
+
     /** Group enabled tribunes by source, in configuration order. */
     fun tribuneGroups(): List<TribuneGroup> {
         val groups = ArrayList<TribuneGroup>()
@@ -117,6 +130,7 @@ data class UiState(
 data class SettingsInput(
     val gb2cServers: List<Gb2cServer>,
     val selectedBoards: Set<String>,
+    val selectedGb2cTribunes: Map<String, Set<String>>,
     val totozServerUrl: String,
     val nickname: String,
     val blockedIdentities: String,

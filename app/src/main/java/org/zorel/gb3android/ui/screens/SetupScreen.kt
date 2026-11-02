@@ -193,6 +193,7 @@ fun SetupScreen(
                         SettingsInput(
                             gb2cServers = servers,
                             selectedBoards = selectedBoards,
+                            selectedGb2cTribunes = state.selectedGb2cTribunes,
                             totozServerUrl = totozServerUrl,
                             nickname = nickname,
                             blockedIdentities = state.localBlocked.joinToString(","),

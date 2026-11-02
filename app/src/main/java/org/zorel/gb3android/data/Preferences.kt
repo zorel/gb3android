@@ -46,6 +46,10 @@ class Preferences(context: Context) {
         get() = prefs.getString(KEY_KNOWN_GB2C_TRIBUNES, "").orEmpty()
         set(value) = prefs.edit { putString(KEY_KNOWN_GB2C_TRIBUNES, value) }
 
+    var selectedGb2cTribunesJson: String
+        get() = prefs.getString(KEY_SELECTED_GB2C_TRIBUNES, "").orEmpty()
+        set(value) = prefs.edit { putString(KEY_SELECTED_GB2C_TRIBUNES, value) }
+
     var activeTribuneKey: String?
         get() = prefs.getString(KEY_ACTIVE_TRIBUNE, null)
         set(value) = prefs.edit {
@@ -222,6 +226,33 @@ class Preferences(context: Context) {
         knownGb2cTribunesJson = json.toString()
     }
 
+    /**
+     * Tribunes displayed for each gb2c server. An absent entry means "all
+     * known tribunes"; an empty array means the user unchecked every one.
+     * The legacy single-server selection is reused for the migrated server.
+     */
+    fun loadSelectedGb2cTribunes(): Map<String, Set<String>> {
+        val raw = prefs.getString(KEY_SELECTED_GB2C_TRIBUNES, null)
+        if (raw != null) return TribuneSelectionCodec.decode(raw)
+
+        val legacyUrl = Gb3Api.normalizeServerUrl(serverUrl)
+        val legacySelection = selectedTribunesCsv.csvSet()
+        val migrated = if (legacyConnectionMode == ConnectionMode.Server &&
+            legacyUrl != null &&
+            legacySelection.isNotEmpty()
+        ) {
+            mapOf(legacyUrl to legacySelection)
+        } else {
+            emptyMap()
+        }
+        saveSelectedGb2cTribunes(migrated)
+        return migrated
+    }
+
+    fun saveSelectedGb2cTribunes(byServer: Map<String, Set<String>>) {
+        selectedGb2cTribunesJson = TribuneSelectionCodec.encode(byServer)
+    }
+
     fun lastReadPostId(tribuneKey: String): Long {
         val key = lastReadKey(tribuneKey)
         if (prefs.contains(key)) return prefs.getLong(key, -1L)
@@ -251,6 +282,7 @@ class Preferences(context: Context) {
         const val KEY_GB2C_SERVERS = "gb2c_servers"
         const val KEY_SELECTED_BOARDS = "selected_boards"
         const val KEY_KNOWN_GB2C_TRIBUNES = "known_gb2c_tribunes"
+        const val KEY_SELECTED_GB2C_TRIBUNES = "selected_gb2c_tribunes"
         const val KEY_ACTIVE_TRIBUNE = "active_tribune_key"
         const val KEY_TOTOZ_SERVER = "totoz_server_url"
         const val KEY_NICKNAME = "nickname"

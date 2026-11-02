@@ -171,8 +171,9 @@ The app can read several sources at once, like roinroin:
 A gb2c server and a direct board can expose the same tribune name. They are
 kept as two separate entries, each with its own posts, badges and last-read
 marker. The tribune bar groups chips by source and the header names the active
-source. Settings can add, remove, rename or disable gb2c servers, and
-check/uncheck direct boards.
+source. Settings can add, remove, rename or disable gb2c servers, check/uncheck
+direct boards, and choose which discovered tribunes to display per gb2c server
+(all are shown by default; **All** and **None** buttons are provided).
 
 The nickname is sent as the post `info`; if it is left empty, a gc2-style random
 nickname is generated. On an Android emulator, `localhost` is the emulator
@@ -250,7 +251,7 @@ columns are dropped, control characters are removed, messages are capped at
 
 Settings are stored locally in `SharedPreferences`:
 
-- gb2c server list (name, URL, enabled), totoz server URL and nickname;
+- gb2c server list (name, URL, enabled) and the displayed tribunes per server;
 - selected direct boards and custom board definitions;
 - local blocked identities and hide/gray mode;
 - plop list;

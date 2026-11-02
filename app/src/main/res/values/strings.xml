@@ -108,8 +108,13 @@
     <string name="settings_server_error_name_invalid">Server name contains invalid characters.</string>
     <string name="settings_server_error_url">Enter a valid http(s) URL.</string>
     <string name="settings_server_duplicate">This server is already configured.</string>
+    <string name="settings_gb2c_tribunes_count">Tribunes (%1$d/%2$d)</string>
+    <string name="settings_select_all">All</string>
+    <string name="settings_select_none">None</string>
+    <string name="settings_no_known_tribunes">No tribunes discovered yet. Save and refresh to load the list.</string>
     <string name="error_duplicate_server">This gb2c server is already configured.</string>
     <string name="error_no_source">Enable a gb2c server or select at least one direct board.</string>
+    <string name="error_select_tribune">Select at least one gb2c tribune or direct board.</string>
     <string name="settings_server_url">gb2c URL</string>
     <string name="settings_server_url_optional">gb2c URL (optional, for totoz/emoji/LinuxFR)</string>
     <string name="settings_server_direct_support">Boards are fetched and posted to directly; the server is only used for auxiliary services.</string>

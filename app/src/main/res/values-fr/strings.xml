@@ -108,8 +108,13 @@
     <string name="settings_server_error_name_invalid">Le nom du serveur contient des caractères invalides.</string>
     <string name="settings_server_error_url">Saisissez une URL http(s) valide.</string>
     <string name="settings_server_duplicate">Ce serveur est déjà configuré.</string>
+    <string name="settings_gb2c_tribunes_count">Tribunes (%1$d/%2$d)</string>
+    <string name="settings_select_all">Toutes</string>
+    <string name="settings_select_none">Aucune</string>
+    <string name="settings_no_known_tribunes">Aucune tribune découverte. Enregistrez et actualisez pour charger la liste.</string>
     <string name="error_duplicate_server">Ce serveur gb2c est déjà configuré.</string>
     <string name="error_no_source">Activez un serveur gb2c ou sélectionnez au moins une tribune directe.</string>
+    <string name="error_select_tribune">Sélectionnez au moins une tribune gb2c ou directe.</string>
     <string name="settings_server_url">URL gb2c</string>
     <string name="settings_server_url_optional">URL gb2c (facultative, pour totoz/emoji/LinuxFR)</string>
     <string name="settings_server_direct_support">Les tribunes sont lues et publiées directement ; le serveur ne sert qu’aux services auxiliaires.</string>

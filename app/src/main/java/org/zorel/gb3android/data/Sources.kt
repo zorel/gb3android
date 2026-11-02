@@ -135,5 +135,47 @@ object Gb2cServerCodec {
     }
 }
 
+/** Which tribunes are displayed for each gb2c server. */
+object TribuneSelection {
+    /**
+     * `null` means the server was never configured: every known tribune is
+     * shown, which is the convenient default for a newly added server.
+     */
+    fun effective(known: List<String>, selection: Set<String>?): List<String> =
+        if (selection == null) known.sorted() else known.filter { it in selection }.sorted()
+}
+
+/** JSON persistence for the per-server tribune selection. */
+object TribuneSelectionCodec {
+    fun encode(byServer: Map<String, Set<String>>): String {
+        val json = JSONObject()
+        for ((url, names) in byServer) {
+            val array = JSONArray()
+            names.sorted().forEach(array::put)
+            json.put(url, array)
+        }
+        return json.toString()
+    }
+
+    fun decode(raw: String): Map<String, Set<String>> {
+        if (raw.isBlank()) return emptyMap()
+        return runCatching {
+            val json = JSONObject(raw)
+            buildMap {
+                for (url in json.keys()) {
+                    val array = json.optJSONArray(url) ?: continue
+                    val names = buildSet {
+                        for (index in 0 until array.length()) {
+                            val name = array.optString(index, "")
+                            if (name.isNotBlank()) add(name)
+                        }
+                    }
+                    put(url, names)
+                }
+            }
+        }.getOrDefault(emptyMap())
+    }
+}
+
 /** Connection state of one source, shown like roinroin's status dots. */
 enum class SourceStatus { Working, Online, Error }

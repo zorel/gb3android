@@ -54,4 +54,22 @@ class SourcesTest {
         assertEquals("https://gb3.example", Gb3Api.normalizeServerUrl("https://gb3.example/"))
         assertNull(Gb3Api.normalizeServerUrl("ftp://gb3.example"))
     }
+
+    @Test
+    fun absentSelectionMeansEveryKnownTribune() {
+        val known = listOf("moules", "dlfp", "gabuzomeu")
+        assertEquals(known.sorted(), TribuneSelection.effective(known, null))
+        assertEquals(listOf("dlfp"), TribuneSelection.effective(known, setOf("dlfp")))
+        assertTrue(TribuneSelection.effective(known, emptySet()).isEmpty())
+    }
+
+    @Test
+    fun tribuneSelectionCodecRoundTrips() {
+        val selection = mapOf(
+            "https://gb3.example" to setOf("dlfp", "moules"),
+            "https://other.example" to emptySet(),
+        )
+        assertEquals(selection, TribuneSelectionCodec.decode(TribuneSelectionCodec.encode(selection)))
+        assertTrue(TribuneSelectionCodec.decode("not json").isEmpty())
+    }
 }

@@ -69,6 +69,8 @@ fun SettingsScreen(
 ) {
     var servers by remember { mutableStateOf(state.gb2cServers) }
     var selectedBoards by remember { mutableStateOf(state.selectedBoards) }
+    var selectedGb2cTribunes by remember { mutableStateOf(state.selectedGb2cTribunes) }
+    var expandedServers by remember { mutableStateOf(setOf<String>()) }
     var totozServerUrl by rememberSaveable { mutableStateOf(state.totozServerUrl) }
     var nickname by rememberSaveable { mutableStateOf(state.nickname) }
     var blocked by rememberSaveable { mutableStateOf(state.localBlocked.joinToString(",")) }
@@ -145,10 +147,96 @@ fun SettingsScreen(
                             TextButton(
                                 onClick = {
                                     servers = servers.filterNot { it.url == server.url }
+                                    selectedGb2cTribunes = selectedGb2cTribunes - server.url
+                                    expandedServers = expandedServers - server.url
                                 },
                             ) {
                                 Text(stringResource(R.string.settings_remove))
                             }
+                        }
+
+                        val known = state.knownTribunes(server)
+                        if (known.isNotEmpty()) {
+                            val selection = selectedGb2cTribunes[server.url]
+                            val selectedCount = if (selection == null) {
+                                known.size
+                            } else {
+                                known.count { it in selection }
+                            }
+                            val expanded = server.url in expandedServers
+                            TextButton(
+                                onClick = {
+                                    expandedServers = if (expanded) {
+                                        expandedServers - server.url
+                                    } else {
+                                        expandedServers + server.url
+                                    }
+                                },
+                            ) {
+                                Text(
+                                    stringResource(
+                                        R.string.settings_gb2c_tribunes_count,
+                                        selectedCount,
+                                        known.size,
+                                    ),
+                                )
+                            }
+                            if (expanded) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    TextButton(
+                                        onClick = {
+                                            selectedGb2cTribunes =
+                                                selectedGb2cTribunes + (server.url to known.toSet())
+                                        },
+                                    ) {
+                                        Text(stringResource(R.string.settings_select_all))
+                                    }
+                                    TextButton(
+                                        onClick = {
+                                            selectedGb2cTribunes =
+                                                selectedGb2cTribunes + (server.url to emptySet())
+                                        },
+                                    ) {
+                                        Text(stringResource(R.string.settings_select_none))
+                                    }
+                                }
+                                known.sorted().forEach { name ->
+                                    val checked = selection?.contains(name) ?: true
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = 24.dp),
+                                    ) {
+                                        Checkbox(
+                                            checked = checked,
+                                            onCheckedChange = { checkedNow ->
+                                                val base = selectedGb2cTribunes[server.url]
+                                                    ?: known.toSet()
+                                                val next = if (checkedNow) {
+                                                    base + name
+                                                } else {
+                                                    base - name
+                                                }
+                                                selectedGb2cTribunes =
+                                                    selectedGb2cTribunes + (server.url to next)
+                                            },
+                                        )
+                                        Text(
+                                            text = name,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            modifier = Modifier.padding(start = 4.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        } else if (server.enabled) {
+                            Text(
+                                text = stringResource(R.string.settings_no_known_tribunes),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 24.dp, bottom = 4.dp),
+                            )
                         }
                     }
                     OutlinedButton(onClick = { showServerDialog = true }) {
@@ -160,6 +248,7 @@ fun SettingsScreen(
                                 SettingsInput(
                                     gb2cServers = servers,
                                     selectedBoards = selectedBoards,
+                                    selectedGb2cTribunes = selectedGb2cTribunes,
                                     totozServerUrl = totozServerUrl,
                                     nickname = nickname,
                                     blockedIdentities = blocked,
@@ -402,6 +491,7 @@ fun SettingsScreen(
                             SettingsInput(
                                 gb2cServers = servers,
                                 selectedBoards = selectedBoards,
+                                selectedGb2cTribunes = selectedGb2cTribunes,
                                 totozServerUrl = totozServerUrl,
                                 nickname = nickname,
                                 blockedIdentities = blocked,

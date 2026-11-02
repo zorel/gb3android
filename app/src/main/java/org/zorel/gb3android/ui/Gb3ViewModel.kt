@@ -27,6 +27,7 @@ import org.zorel.gb3android.data.Totoz
 import org.zorel.gb3android.data.TotozServer
 import org.zorel.gb3android.data.TribuneBadge
 import org.zorel.gb3android.data.TribuneKey
+import org.zorel.gb3android.data.TribuneSelection
 import org.zorel.gb3android.data.csvSet
 import org.zorel.gb3android.data.randomNickname
 import org.zorel.gb3android.domain.Conversation
@@ -113,8 +114,14 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         val boardNames = boards.mapTo(HashSet()) { it.name }
         val servers = prefs.loadGb2cServers()
         val selectedBoards = prefs.loadSelectedBoards(boardNames)
+        val selectedGb2cTribunes = prefs.loadSelectedGb2cTribunes()
         knownTribunes.putAll(prefs.loadKnownTribunes())
-        val tribunes = buildTribunes(servers, selectedBoards, boards)
+        val tribunes = buildTribunes(
+            servers,
+            selectedBoards,
+            boards,
+            selectedGb2cTribunes,
+        )
         val storedActive = prefs.activeTribuneKey?.let(TribuneKey::fromKey)
         val active = storedActive?.takeIf { candidate ->
             tribunes.any { it.key == candidate.key }
@@ -125,6 +132,8 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
             gb2cServers = servers,
             boards = boards,
             selectedBoards = selectedBoards,
+            knownGb2cTribunes = knownTribunes.toMap(),
+            selectedGb2cTribunes = selectedGb2cTribunes,
             totozServerUrl = prefs.totozServerUrl,
             nickname = nickname,
             tribunes = tribunes,
@@ -178,11 +187,14 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         servers: List<Gb2cServer>,
         selectedBoards: Set<String>,
         boards: List<Board>,
+        selectedGb2cTribunes: Map<String, Set<String>>,
     ): List<TribuneKey> {
         val result = ArrayList<TribuneKey>()
         for (server in servers) {
             if (!server.enabled) continue
-            for (name in knownTribunes[server.url].orEmpty().sorted()) {
+            val known = knownTribunes[server.url].orEmpty()
+            val names = TribuneSelection.effective(known, selectedGb2cTribunes[server.url])
+            for (name in names) {
                 result += TribuneKey(SourceId.Gb2c(server.url), name)
             }
         }
@@ -296,7 +308,12 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
             serverBlocked = blockedByServer.values.flatten().toSet()
 
             val latest = _state.value
-            val tribunes = buildTribunes(latest.gb2cServers, latest.selectedBoards, latest.boards)
+            val tribunes = buildTribunes(
+                latest.gb2cServers,
+                latest.selectedBoards,
+                latest.boards,
+                latest.selectedGb2cTribunes,
+            )
             val active = chooseActiveTribune(latest.activeTribune, tribunes, pendingDraftOnStart)
             pendingDraftOnStart = null
             selectedKey = null
@@ -307,6 +324,7 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
                     initializing = false,
                     setupRequired = false,
                     serverBlocked = serverBlocked,
+                    knownGb2cTribunes = known.toMap(),
                     selectedKey = null,
                 )
             }
@@ -903,8 +921,24 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         val selectedBoards = input.selectedBoards
             .filter { name -> current.boards.any { it.name == name } }
             .toSet()
+        val serverUrls = servers.mapTo(HashSet()) { it.url }
+        val selectedGb2cTribunes = input.selectedGb2cTribunes
+            .filterKeys { url -> url in serverUrls }
         if (servers.none { it.enabled } && selectedBoards.isEmpty()) {
             emit(tr(R.string.error_no_source), isError = true)
+            return false
+        }
+        val enabledKnown = servers.filter { it.enabled }.map { server ->
+            knownTribunes[server.url].orEmpty()
+        }
+        val effectiveGb2c = servers.filter { it.enabled }.sumOf { server ->
+            TribuneSelection.effective(
+                knownTribunes[server.url].orEmpty(),
+                selectedGb2cTribunes[server.url],
+            ).size
+        }
+        if (selectedBoards.isEmpty() && effectiveGb2c == 0 && enabledKnown.none { it.isEmpty() }) {
+            emit(tr(R.string.error_select_tribune), isError = true)
             return false
         }
         val totozServer = if (input.totozServerUrl.isBlank()) {
@@ -923,9 +957,11 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         val servicesServer = servers.firstOrNull { it.enabled }?.url ?: current.serverUrl
         val sourcesChanged = servers != current.gb2cServers ||
             selectedBoards != current.selectedBoards
+        val selectionsChanged = selectedGb2cTribunes != current.selectedGb2cTribunes
 
         prefs.saveGb2cServers(servers)
         prefs.saveSelectedBoards(selectedBoards)
+        prefs.saveSelectedGb2cTribunes(selectedGb2cTribunes)
         prefs.serverUrl = servicesServer
         prefs.totozServerUrl = totozServer
         prefs.nickname = nickname
@@ -939,6 +975,7 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
                 serverUrl = servicesServer,
                 gb2cServers = servers,
                 selectedBoards = selectedBoards,
+                selectedGb2cTribunes = selectedGb2cTribunes,
                 totozServerUrl = totozServer,
                 nickname = nickname,
                 localBlocked = blocked,
@@ -976,6 +1013,29 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
             }
             prefs.activeTribuneKey = null
             bootstrap(clearPosts = true)
+            return true
+        }
+
+        if (selectionsChanged) {
+            val tribunes = buildTribunes(servers, selectedBoards, current.boards, selectedGb2cTribunes)
+            val allowed = tribunes.mapTo(HashSet()) { it.key }
+            allPosts.keys.toList()
+                .filter { key -> allPosts[key]?.tribuneKey?.key !in allowed }
+                .forEach(allPosts::remove)
+            selectedKey = null
+            val active = current.activeTribune
+                ?.takeIf { candidate -> tribunes.any { it.key == candidate.key } }
+                ?: tribunes.firstOrNull()
+            prefs.activeTribuneKey = active?.key
+            _state.update {
+                it.copy(
+                    tribunes = tribunes,
+                    activeTribune = active,
+                    selectedKey = null,
+                )
+            }
+            recomputeNow()
+            if (foreground) syncPolling(force = true)
             return true
         }
 
@@ -1018,7 +1078,12 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
         val boards = PredefinedBoards.merge(custom)
         val selectedBoards = current.selectedBoards + board.name
         prefs.saveSelectedBoards(selectedBoards)
-        val tribunes = buildTribunes(current.gb2cServers, selectedBoards, boards)
+        val tribunes = buildTribunes(
+            current.gb2cServers,
+            selectedBoards,
+            boards,
+            current.selectedGb2cTribunes,
+        )
         val active = current.activeTribune
             ?.takeIf { candidate -> tribunes.any { it.key == candidate.key } }
             ?: tribunes.firstOrNull()
@@ -1059,7 +1124,12 @@ class Gb3ViewModel(application: Application) : AndroidViewModel(application) {
             .forEach(allPosts::remove)
         boardPollJobs.remove(name)?.cancel()
         boardStatus.remove(name)
-        val tribunes = buildTribunes(current.gb2cServers, selectedBoards, boards)
+        val tribunes = buildTribunes(
+            current.gb2cServers,
+            selectedBoards,
+            boards,
+            current.selectedGb2cTribunes,
+        )
         val active = current.activeTribune
             ?.takeIf { candidate -> tribunes.any { it.key == candidate.key } }
             ?: tribunes.firstOrNull()
