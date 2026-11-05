@@ -8,6 +8,10 @@ one or more gb2c servers **and** direct boards at the same time. There is no
 WebView for the tribune itself; a small WebView is only used to complete the
 LinuxFR OAuth flow.
 
+<p align="center">
+  <img src="screenshot.jpeg" alt="gb3 for Android screenshot" width="360">
+</p>
+
 ## Features
 
 The client covers the feature set of `gb3tui` and `gc2`, adapted to touch:
